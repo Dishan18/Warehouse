@@ -17,7 +17,6 @@ import {
   TableHead,
   TableRow,
   TextField,
-  Toolbar,
   Typography,
 } from '@mui/material'
 import {
@@ -35,13 +34,14 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts'
-import AlertTriangleOutlinedIcon from '@mui/icons-material/WarningAmberOutlined'
-import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined'
+import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded'
+import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded'
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined'
-import PaidOutlinedIcon from '@mui/icons-material/PaidOutlined'
-import TrendingUpOutlinedIcon from '@mui/icons-material/TrendingUpOutlined'
-import TrendingDownOutlinedIcon from '@mui/icons-material/TrendingDownOutlined'
-import BlockOutlinedIcon from '@mui/icons-material/BlockOutlined'
+import AccountBalanceWalletOutlinedIcon from '@mui/icons-material/AccountBalanceWalletOutlined'
+import TrendingUpRoundedIcon from '@mui/icons-material/TrendingUpRounded'
+import TrendingDownRoundedIcon from '@mui/icons-material/TrendingDownRounded'
+import BlockRoundedIcon from '@mui/icons-material/BlockRounded'
+import CalendarTodayRoundedIcon from '@mui/icons-material/CalendarTodayRounded'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { downloadBlob } from '@/utils/download'
@@ -49,7 +49,7 @@ import { reportsApi, type DateRange } from '@/api/reports'
 import { settingsApi } from '@/api/settingsApi'
 import { format } from 'date-fns'
 
-const COLORS = ['#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16']
+const PIE_COLORS = ['#10b981', '#0ea5e9', '#6366f1', '#f59e0b', '#ec4899', '#8b5cf6', '#14b8a6', '#f43f5e']
 
 function formatCurrency(value: number, currencyCode: string = 'USD'): string {
   try {
@@ -70,58 +70,62 @@ interface StatCardProps {
   label: string
   value: string
   icon: ReactNode
-  color: string
+  bgColor: string
+  iconColor: string
   trend?: 'up' | 'down'
   trendLabel?: string
 }
 
-function StatCard({ label, value, icon, color, trend, trendLabel }: StatCardProps) {
+function StatCard({ label, value, icon, bgColor, iconColor, trend, trendLabel }: StatCardProps) {
   return (
-    <Card>
-      <CardContent>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+    <Card
+      sx={{
+        borderRadius: '16px',
+        border: '1px solid',
+        borderColor: (theme) =>
+          theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
+        boxShadow: (theme) =>
+          theme.palette.mode === 'dark' ? '0 1px 3px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.03)',
+      }}
+    >
+      <CardContent sx={{ p: 2.5 }}>
+        <Stack direction="row" spacing={2} alignItems="center">
           <Box
             sx={{
-              width: 48,
-              height: 48,
-              flexShrink: 0,
-              borderRadius: 2,
+              width: 46,
+              height: 46,
+              borderRadius: '12px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              bgcolor: color,
-              color: 'white',
+              bgcolor: bgColor,
+              color: iconColor,
+              flexShrink: 0,
             }}
           >
             {icon}
           </Box>
-          <Box>
-            <Typography variant="h6" fontWeight={700}>
-              {value}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
+          <Box sx={{ minWidth: 0, flex: 1 }}>
+            <Typography variant="caption" color="text.secondary" fontWeight={500}>
               {label}
             </Typography>
+            <Typography variant="h5" fontWeight={700} sx={{ letterSpacing: '-0.02em', my: 0.25 }}>
+              {value}
+            </Typography>
             {trend && trendLabel && (
-              <Stack
-                direction="row"
-                spacing={0.5}
-                alignItems="center"
-                sx={{
-                  mt: 0.5,
-                  color: trend === 'up' ? 'success.main' : 'text.secondary',
-                }}
-              >
+              <Stack direction="row" spacing={0.5} alignItems="center">
                 {trend === 'up' ? (
-                  <TrendingUpOutlinedIcon sx={{ fontSize: 14 }} />
+                  <TrendingUpRoundedIcon sx={{ fontSize: 14, color: 'success.main' }} />
                 ) : (
-                  <TrendingDownOutlinedIcon sx={{ fontSize: 14 }} />
+                  <TrendingDownRoundedIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
                 )}
-                <Typography variant="caption">{trendLabel}</Typography>
+                <Typography variant="caption" color={trend === 'up' ? 'success.main' : 'text.secondary'} fontWeight={600}>
+                  {trendLabel}
+                </Typography>
               </Stack>
             )}
           </Box>
-        </Box>
+        </Stack>
       </CardContent>
     </Card>
   )
@@ -137,10 +141,33 @@ function ChartCard({
   children: ReactNode
 }) {
   return (
-    <Card>
-      <CardHeader title={title} subheader={description} />
-      <CardContent>
-        <Box sx={{ height: 300, width: '100%' }}>{children}</Box>
+    <Card
+      sx={{
+        borderRadius: '16px',
+        border: '1px solid',
+        borderColor: (theme) =>
+          theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
+        boxShadow: (theme) =>
+          theme.palette.mode === 'dark' ? '0 1px 3px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.03)',
+      }}
+    >
+      <CardHeader
+        title={
+          <Typography variant="subtitle1" fontWeight={700}>
+            {title}
+          </Typography>
+        }
+        subheader={
+          description ? (
+            <Typography variant="caption" color="text.secondary">
+              {description}
+            </Typography>
+          ) : undefined
+        }
+        sx={{ pb: 0, pt: 2.5, px: 2.5 }}
+      />
+      <CardContent sx={{ p: 2.5 }}>
+        <Box sx={{ height: 280, width: '100%' }}>{children}</Box>
       </CardContent>
     </Card>
   )
@@ -156,7 +183,7 @@ function DateRangePicker({
   onChange: (dates: DateRange) => void
 }) {
   return (
-    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems="center">
       <TextField
         id="startDate"
         label="From"
@@ -165,6 +192,10 @@ function DateRangePicker({
         value={startDate}
         InputLabelProps={{ shrink: true }}
         onChange={(e) => onChange({ startDate: e.target.value, endDate })}
+        sx={{
+          minWidth: 140,
+          '& .MuiOutlinedInput-root': { borderRadius: '10px' },
+        }}
       />
       <TextField
         id="endDate"
@@ -174,6 +205,10 @@ function DateRangePicker({
         value={endDate}
         InputLabelProps={{ shrink: true }}
         onChange={(e) => onChange({ startDate, endDate: e.target.value })}
+        sx={{
+          minWidth: 140,
+          '& .MuiOutlinedInput-root': { borderRadius: '10px' },
+        }}
       />
     </Stack>
   )
@@ -236,7 +271,7 @@ export default function Reports() {
       head: [['Metric', 'Value']],
       body: summaryData,
       theme: 'striped',
-      headStyles: { fillColor: [14, 165, 233] },
+      headStyles: { fillColor: [5, 150, 105] },
     })
 
     yPos = (pdf as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10
@@ -254,7 +289,7 @@ export default function Reports() {
         fmtCurrency(item.value),
       ]),
       theme: 'striped',
-      headStyles: { fillColor: [14, 165, 233] },
+      headStyles: { fillColor: [5, 150, 105] },
     })
 
     yPos = (pdf as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10
@@ -269,7 +304,7 @@ export default function Reports() {
         head: [['Product', 'Movements']],
         body: report.topProductsByMovement.map((item) => [item.product, formatNumber(item.movements)]),
         theme: 'striped',
-        headStyles: { fillColor: [14, 165, 233] },
+        headStyles: { fillColor: [5, 150, 105] },
       })
     }
 
@@ -279,42 +314,27 @@ export default function Reports() {
 
   if (isLoading) {
     return (
-      <Box>
-        <Toolbar disableGutters sx={{ justifyContent: 'space-between' }}>
+      <Box sx={{ maxWidth: 1400, mx: 'auto', p: { xs: 2, sm: 3 } }}>
+        <Stack direction="row" justifyContent="space-between" sx={{ mb: 3 }}>
           <Box>
-            <Typography variant="h5" fontWeight={600}>
-              Reports
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Advanced analytics and exportable reports
-            </Typography>
+            <Skeleton variant="text" width={180} height={36} />
+            <Skeleton variant="text" width={260} height={20} />
           </Box>
-          <Stack direction="row" spacing={1}>
-            <Skeleton variant="rounded" width={140} height={40} />
-            <Skeleton variant="rounded" width={120} height={40} />
-          </Stack>
-        </Toolbar>
-        <Grid container spacing={3}>
+          <Skeleton variant="rounded" width={240} height={40} />
+        </Stack>
+        <Grid container spacing={2.5} sx={{ mb: 3 }}>
           {[1, 2, 3, 4].map((item) => (
             <Grid item xs={12} sm={6} md={3} key={item}>
-              <Skeleton variant="rounded" height={96} />
+              <Skeleton variant="rounded" height={100} sx={{ borderRadius: '16px' }} />
             </Grid>
           ))}
         </Grid>
-        <Grid container spacing={3} sx={{ mt: 0 }}>
+        <Grid container spacing={2.5}>
           <Grid item xs={12} lg={6}>
-            <Skeleton variant="rounded" height={350} />
+            <Skeleton variant="rounded" height={340} sx={{ borderRadius: '16px' }} />
           </Grid>
           <Grid item xs={12} lg={6}>
-            <Skeleton variant="rounded" height={350} />
-          </Grid>
-        </Grid>
-        <Grid container spacing={3} sx={{ mt: 0 }}>
-          <Grid item xs={12} lg={6}>
-            <Skeleton variant="rounded" height={350} />
-          </Grid>
-          <Grid item xs={12} lg={6}>
-            <Skeleton variant="rounded" height={350} />
+            <Skeleton variant="rounded" height={340} sx={{ borderRadius: '16px' }} />
           </Grid>
         </Grid>
       </Box>
@@ -323,15 +343,15 @@ export default function Reports() {
 
   if (error) {
     return (
-      <Box sx={{ textAlign: 'center', py: 4 }}>
-        <AlertTriangleOutlinedIcon sx={{ fontSize: 48, color: 'error.main', mb: 2 }} />
-        <Typography variant="h6" fontWeight={600} gutterBottom>
+      <Box sx={{ textAlign: 'center', py: 8, maxWidth: 480, mx: 'auto' }}>
+        <WarningAmberRoundedIcon sx={{ fontSize: 52, color: 'error.main', mb: 2 }} />
+        <Typography variant="h6" fontWeight={700} gutterBottom>
           Failed to load report
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
           {(error as Error).message}
         </Typography>
-        <Button variant="contained" onClick={() => window.location.reload()}>
+        <Button variant="contained" onClick={() => window.location.reload()} sx={{ borderRadius: '10px' }}>
           Retry
         </Button>
       </Box>
@@ -340,30 +360,36 @@ export default function Reports() {
 
   if (!report) {
     return (
-      <Box sx={{ textAlign: 'center', py: 4 }}>
-        <Inventory2OutlinedIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 2 }} />
-        <Typography variant="h6" fontWeight={600} gutterBottom>
+      <Box sx={{ textAlign: 'center', py: 8, maxWidth: 480, mx: 'auto' }}>
+        <Inventory2OutlinedIcon sx={{ fontSize: 52, color: 'text.secondary', mb: 2 }} />
+        <Typography variant="h6" fontWeight={700} gutterBottom>
           No data available
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          No inventory data found for the selected period.
+          No inventory transactions recorded for the selected period.
         </Typography>
       </Box>
     )
   }
 
   return (
-    <Box>
-      <Toolbar disableGutters sx={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
+    <Box sx={{ maxWidth: 1400, mx: 'auto', p: { xs: 2, sm: 3 } }}>
+      <Stack
+        direction={{ xs: 'column', md: 'row' }}
+        alignItems={{ xs: 'flex-start', md: 'center' }}
+        justifyContent="space-between"
+        spacing={2}
+        sx={{ mb: 3 }}
+      >
         <Box>
-          <Typography variant="h5" fontWeight={600}>
-            Reports
+          <Typography variant="h5" fontWeight={700} sx={{ letterSpacing: '-0.02em', mb: 0.25 }}>
+            Analytics & Reports
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Advanced analytics and exportable reports
+            Facility valuation metrics, category breakdowns, and exportable PDF audit summaries
           </Typography>
         </Box>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="center">
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems="center">
           <DateRangePicker
             startDate={dateRange.startDate}
             endDate={dateRange.endDate}
@@ -371,74 +397,91 @@ export default function Reports() {
           />
           <Button
             variant="contained"
-            startIcon={<DownloadOutlinedIcon />}
+            startIcon={<DownloadRoundedIcon />}
             onClick={handleExportPdf}
+            sx={{
+              borderRadius: '10px',
+              textTransform: 'none',
+              fontWeight: 600,
+              boxShadow: 'none',
+              px: 2.5,
+              py: 0.85,
+              whiteSpace: 'nowrap',
+            }}
           >
             Export PDF
           </Button>
         </Stack>
-      </Toolbar>
+      </Stack>
 
-      <Grid container spacing={3}>
+      <Grid container spacing={2.5} sx={{ mb: 3 }}>
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
             label="Total Products"
             value={formatNumber(report.totalProducts)}
-            icon={<Inventory2OutlinedIcon />}
-            color="#4f46e5"
+            icon={<Inventory2OutlinedIcon sx={{ fontSize: 22 }} />}
+            bgColor="rgba(14, 165, 233, 0.12)"
+            iconColor="#0284c7"
           />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
             label="Low Stock Alerts"
             value={formatNumber(report.lowStockProducts)}
-            icon={<AlertTriangleOutlinedIcon />}
-            color="#d97706"
+            icon={<WarningAmberRoundedIcon sx={{ fontSize: 22 }} />}
+            bgColor="rgba(245, 158, 11, 0.12)"
+            iconColor="#d97706"
             trend={report.lowStockProducts > 0 ? 'up' : 'down'}
-            trendLabel={report.lowStockProducts > 0 ? 'Needs attention' : 'All stocked'}
+            trendLabel={report.lowStockProducts > 0 ? 'Requires attention' : 'Optimal'}
           />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
             label="Out of Stock"
             value={formatNumber(report.outOfStockProducts)}
-            icon={<BlockOutlinedIcon />}
-            color="#e11d48"
+            icon={<BlockRoundedIcon sx={{ fontSize: 22 }} />}
+            bgColor="rgba(239, 68, 68, 0.12)"
+            iconColor="#e11d48"
             trend={report.outOfStockProducts > 0 ? 'up' : 'down'}
-            trendLabel={report.outOfStockProducts > 0 ? 'Critical' : 'None'}
+            trendLabel={report.outOfStockProducts > 0 ? 'Depleted' : 'None'}
           />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
-            label="Inventory Value"
+            label="Total Inventory Value"
             value={fmtCurrency(report.totalInventoryValue)}
-            icon={<PaidOutlinedIcon />}
-            color="#059669"
+            icon={<AccountBalanceWalletOutlinedIcon sx={{ fontSize: 22 }} />}
+            bgColor="rgba(16, 185, 129, 0.12)"
+            iconColor="#059669"
           />
         </Grid>
       </Grid>
 
-      <Grid container spacing={3} sx={{ mt: 0 }}>
+      <Grid container spacing={2.5} sx={{ mb: 3 }}>
         <Grid item xs={12} lg={6}>
           <ChartCard
             title="Products by Category"
-            description="Distribution of products across categories"
+            description="Item count distribution across product departments"
           >
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={report.productsByCategory} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis type="number" tickFormatter={formatNumber} />
-                <YAxis type="category" dataKey="category" width={120} />
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} opacity={0.15} />
+                <XAxis type="number" tickFormatter={formatNumber} tick={{ fontSize: 12 }} />
+                <YAxis type="category" dataKey="category" width={110} tick={{ fontSize: 12 }} />
                 <Tooltip
                   formatter={(value) => [formatNumber(Number(value ?? 0)), 'Products']}
                   labelFormatter={(label) => String(label ?? '')}
+                  contentStyle={{
+                    borderRadius: 10,
+                    border: '1px solid rgba(0,0,0,0.08)',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                  }}
                 />
-                <Legend />
                 <Bar
                   dataKey="count"
                   fill="#0ea5e9"
-                  radius={[0, 4, 4, 0]}
-                  maxBarSize={40}
+                  radius={[0, 6, 6, 0]}
+                  maxBarSize={28}
                 />
               </BarChart>
             </ResponsiveContainer>
@@ -448,23 +491,27 @@ export default function Reports() {
         <Grid item xs={12} lg={6}>
           <ChartCard
             title="Inventory Value by Category"
-            description="Total inventory value per category"
+            description="Capital allocation valuation across departments"
           >
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={report.productsByCategory} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis type="number" tickFormatter={fmtCurrency} />
-                <YAxis type="category" dataKey="category" width={120} />
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} opacity={0.15} />
+                <XAxis type="number" tickFormatter={fmtCurrency} tick={{ fontSize: 12 }} />
+                <YAxis type="category" dataKey="category" width={110} tick={{ fontSize: 12 }} />
                 <Tooltip
-                  formatter={(value) => [fmtCurrency(Number(value ?? 0)), 'Value']}
+                  formatter={(value) => [fmtCurrency(Number(value ?? 0)), 'Valuation']}
                   labelFormatter={(label) => String(label ?? '')}
+                  contentStyle={{
+                    borderRadius: 10,
+                    border: '1px solid rgba(0,0,0,0.08)',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                  }}
                 />
-                <Legend />
                 <Bar
                   dataKey="value"
                   fill="#10b981"
-                  radius={[0, 4, 4, 0]}
-                  maxBarSize={40}
+                  radius={[0, 6, 6, 0]}
+                  maxBarSize={28}
                 />
               </BarChart>
             </ResponsiveContainer>
@@ -472,36 +519,41 @@ export default function Reports() {
         </Grid>
       </Grid>
 
-      <Grid container spacing={3} sx={{ mt: 0 }}>
-        <Grid item xs={12} lg={6}>
+      <Grid container spacing={2.5} sx={{ mb: 3 }}>
+        <Grid item xs={12} lg={7}>
           <ChartCard
-            title="Stock Movements"
-            description="Daily stock in vs out movements"
+            title="Stock Flow Trends"
+            description="Daily inbound intake vs outbound dispatches"
           >
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={report.stockMovements}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" tickFormatter={(date) => format(new Date(date), 'MM/dd')} />
-                <YAxis tickFormatter={formatNumber} />
+                <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
+                <XAxis dataKey="date" tickFormatter={(date) => format(new Date(date), 'MM/dd')} tick={{ fontSize: 12 }} />
+                <YAxis tickFormatter={formatNumber} tick={{ fontSize: 12 }} />
                 <Tooltip
                   formatter={(value) => [formatNumber(Number(value ?? 0)), 'Units']}
                   labelFormatter={(label) => format(new Date(String(label)), 'PP')}
+                  contentStyle={{
+                    borderRadius: 10,
+                    border: '1px solid rgba(0,0,0,0.08)',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                  }}
                 />
                 <Legend />
                 <Line
                   type="monotone"
                   dataKey="in"
                   stroke="#10b981"
-                  strokeWidth={2}
-                  dot={{ fill: '#10b981', strokeWidth: 2 }}
+                  strokeWidth={2.5}
+                  dot={{ fill: '#10b981', r: 3 }}
                   name="Stock In"
                 />
                 <Line
                   type="monotone"
                   dataKey="out"
-                  stroke="#ef4444"
-                  strokeWidth={2}
-                  dot={{ fill: '#ef4444', strokeWidth: 2 }}
+                  stroke="#f43f5e"
+                  strokeWidth={2.5}
+                  dot={{ fill: '#f43f5e', r: 3 }}
                   name="Stock Out"
                 />
               </LineChart>
@@ -509,10 +561,10 @@ export default function Reports() {
           </ChartCard>
         </Grid>
 
-        <Grid item xs={12} lg={6}>
+        <Grid item xs={12} lg={5}>
           <ChartCard
-            title="Top Products by Movement"
-            description="Most moved products in the period"
+            title="Top Transacted Items"
+            description="SKUs with the highest movement velocity in this period"
           >
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -520,22 +572,23 @@ export default function Reports() {
                   data={report.topProductsByMovement}
                   cx="50%"
                   cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  fill="#8884d8"
+                  innerRadius={55}
+                  outerRadius={95}
+                  paddingAngle={3}
                   dataKey="movements"
                   nameKey="product"
-                  label={(entry) => {
-                    const item = entry as { product?: string; percent?: number }
-                    return `${item.product ?? ''} ${Math.round((item.percent ?? 0) * 100)}%`
-                  }}
                 >
                   {report.topProductsByMovement.map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                   ))}
                 </Pie>
                 <Tooltip
                   formatter={(value) => [formatNumber(Number(value ?? 0)), 'Movements']}
+                  contentStyle={{
+                    borderRadius: 10,
+                    border: '1px solid rgba(0,0,0,0.08)',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                  }}
                 />
                 <Legend />
               </PieChart>
@@ -544,33 +597,60 @@ export default function Reports() {
         </Grid>
       </Grid>
 
-      <Card sx={{ mt: 3 }}>
+      {/* Supplier Performance Table */}
+      <Card
+        sx={{
+          borderRadius: '16px',
+          border: '1px solid',
+          borderColor: (theme) =>
+            theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
+          boxShadow: (theme) =>
+            theme.palette.mode === 'dark' ? '0 1px 3px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.03)',
+        }}
+      >
         <CardHeader
-          title="Supplier Performance"
-          subheader="Products and total value per supplier"
+          title={
+            <Typography variant="subtitle1" fontWeight={700}>
+              Supplier Contribution & Volume
+            </Typography>
+          }
+          subheader={
+            <Typography variant="caption" color="text.secondary">
+              Product catalog counts and cumulative stock valuations per vendor
+            </Typography>
+          }
+          sx={{ pb: 1.5, pt: 2.5, px: 2.5 }}
         />
         <CardContent sx={{ p: 0 }}>
           <TableContainer>
-            <Table size="small">
+            <Table size="medium">
               <TableHead>
-                <TableRow>
-                  <TableCell>
-                    <b>Supplier</b>
+                <TableRow sx={{ bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)') }}>
+                  <TableCell sx={{ fontSize: '0.75rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', pl: 2.5 }}>
+                    Supplier
                   </TableCell>
-                  <TableCell align="right">
-                    <b>Products</b>
+                  <TableCell align="right" sx={{ fontSize: '0.75rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase' }}>
+                    Supplied SKUs
                   </TableCell>
-                  <TableCell align="right">
-                    <b>Total Value</b>
+                  <TableCell align="right" sx={{ fontSize: '0.75rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', pr: 2.5 }}>
+                    Cumulative Valuation
                   </TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {report.supplierPerformance.map((supplier) => (
-                  <TableRow key={supplier.supplier} hover>
-                    <TableCell sx={{ fontWeight: 600 }}>{supplier.supplier}</TableCell>
+                  <TableRow
+                    key={supplier.supplier}
+                    sx={{
+                      '&:hover': {
+                        bgcolor: (theme) =>
+                          theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
+                      },
+                    }}
+                  >
+                    <TableCell sx={{ fontWeight: 600, pl: 2.5 }}>{supplier.supplier}</TableCell>
                     <TableCell align="right">{formatNumber(supplier.products)}</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 600 }}>
+                    <TableCell align="right" sx={{ fontWeight: 700, color: 'primary.main', pr: 2.5 }}>
                       {fmtCurrency(supplier.totalValue)}
                     </TableCell>
                   </TableRow>
@@ -582,8 +662,8 @@ export default function Reports() {
       </Card>
 
       {report.supplierPerformance.length === 0 && (
-        <Alert severity="info" sx={{ mt: 2 }}>
-          No supplier data available for the selected period.
+        <Alert severity="info" sx={{ mt: 2.5, borderRadius: '12px' }}>
+          No supplier data available for the selected date period.
         </Alert>
       )}
     </Box>

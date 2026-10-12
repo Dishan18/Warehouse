@@ -23,6 +23,7 @@ export DB_PASSWORD="your_supabase_database_password"
 ./mvnw spring-boot:run
 ```
 
+
 Wait for the console banner:
 ```
 Started SmartWarehouseApplication in ~15 seconds

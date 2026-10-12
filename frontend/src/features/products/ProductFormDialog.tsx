@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
   Alert,
+  Box,
   Button,
   Dialog,
   DialogActions,
@@ -17,6 +18,7 @@ import {
   Stack,
   Switch,
   TextField,
+  Typography,
 } from '@mui/material'
 import type { Category, Product, ProductRequest, Supplier } from '../../types'
 import { categoryApi } from '../../api/categoryApi'
@@ -51,7 +53,9 @@ type ProductFormValues = z.output<typeof productSchema>
 
 interface ProductFormDialogProps {
   open: boolean
-  product: Product | null
+  product?: Product | null
+  editing?: Product | null
+  categories?: Category[]
   error: string | null
   onClose: () => void
   onSubmit: (data: ProductRequest) => Promise<void>
@@ -60,11 +64,14 @@ interface ProductFormDialogProps {
 export default function ProductFormDialog({
   open,
   product,
+  editing,
+  categories: preloadedCategories,
   error,
   onClose,
   onSubmit,
 }: ProductFormDialogProps) {
-  const [categories, setCategories] = useState<Category[]>([])
+  const activeProduct = editing ?? product ?? null
+  const [categories, setCategories] = useState<Category[]>(preloadedCategories ?? [])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
 
   const {
@@ -91,31 +98,33 @@ export default function ProductFormDialog({
   useEffect(() => {
     if (open) {
       reset({
-        name: product?.name ?? '',
-        sku: product?.sku ?? '',
-        description: product?.description ?? '',
-        categoryId: product?.categoryId ?? '',
-        supplierId: product?.supplierId ?? '',
-        price: product?.price ?? 0,
-        quantity: product?.quantity ?? 0,
-        minStock: product?.minStock ?? 0,
-        active: product?.active ?? true,
+        name: activeProduct?.name ?? '',
+        sku: activeProduct?.sku ?? '',
+        description: activeProduct?.description ?? '',
+        categoryId: activeProduct?.categoryId ?? '',
+        supplierId: activeProduct?.supplierId ?? '',
+        price: activeProduct?.price ?? 0,
+        quantity: activeProduct?.quantity ?? 0,
+        minStock: activeProduct?.minStock ?? 0,
+        active: activeProduct?.active ?? true,
       })
     }
-  }, [open, product, reset])
+  }, [open, activeProduct, reset])
 
   useEffect(() => {
     if (open) {
-      categoryApi
-        .getAll({ page: 0, size: 100, sortBy: 'name', direction: 'asc' })
-        .then((page) => setCategories(page.content))
-        .catch(() => setCategories([]))
+      if (!preloadedCategories || preloadedCategories.length === 0) {
+        categoryApi
+          .getAll({ page: 0, size: 100, sortBy: 'name', direction: 'asc' })
+          .then((page) => setCategories(page.content))
+          .catch(() => setCategories([]))
+      }
       supplierApi
         .getAll({ page: 0, size: 100, sortBy: 'name', direction: 'asc' })
         .then((page) => setSuppliers(page.content))
         .catch(() => setSuppliers([]))
     }
-  }, [open])
+  }, [open, preloadedCategories])
 
   const submit = (values: ProductFormValues) => {
     onSubmit({
@@ -132,26 +141,62 @@ export default function ProductFormDialog({
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>{product ? 'Edit product' : 'New product'}</DialogTitle>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="sm"
+      fullWidth
+      PaperProps={{
+        sx: {
+          borderRadius: '18px',
+          border: '1px solid',
+          borderColor: (theme) =>
+            theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.08)',
+          boxShadow: (theme) =>
+            theme.palette.mode === 'dark'
+              ? '0 24px 48px -12px rgba(0, 0, 0, 0.6)'
+              : '0 20px 40px -12px rgba(0, 0, 0, 0.12)',
+        },
+      }}
+    >
+      <DialogTitle sx={{ pb: 1, pt: 2.5, px: 3 }}>
+        <Typography variant="h6" fontWeight={700} sx={{ letterSpacing: '-0.01em' }}>
+          {activeProduct ? 'Edit Product' : 'New Product'}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          {activeProduct ? 'Update SKU information and inventory parameters' : 'Register a new inventory item in the catalog'}
+        </Typography>
+      </DialogTitle>
+
       <form onSubmit={handleSubmit(submit)} noValidate>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            {error && <Alert severity="error">{error}</Alert>}
+        <DialogContent sx={{ px: 3, py: 2 }}>
+          <Stack spacing={2.5}>
+            {error && (
+              <Alert severity="error" sx={{ borderRadius: '10px' }}>
+                {error}
+              </Alert>
+            )}
+
             <TextField
-              label="Name"
+              label="Product Name"
+              placeholder="e.g. Wireless Ergonomic Mouse"
               fullWidth
+              autoFocus
               {...register('name')}
               error={Boolean(errors.name)}
               helperText={errors.name?.message}
+              InputProps={{ sx: { borderRadius: '10px' } }}
             />
+
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
               <TextField
                 label="SKU"
+                placeholder="e.g. LOG-M-001"
                 fullWidth
                 {...register('sku')}
                 error={Boolean(errors.sku)}
                 helperText={errors.sku?.message}
+                InputProps={{ sx: { borderRadius: '10px' } }}
               />
               <Controller
                 name="categoryId"
@@ -164,6 +209,7 @@ export default function ProductFormDialog({
                       value={field.value}
                       onChange={field.onChange}
                       error={Boolean(errors.categoryId)}
+                      sx={{ borderRadius: '10px' }}
                     >
                       {categories.map((category) => (
                         <MenuItem key={category.id} value={category.id}>
@@ -174,87 +220,145 @@ export default function ProductFormDialog({
                   </FormControl>
                 )}
               />
-              <Controller
-                name="supplierId"
-                control={control}
-                render={({ field }) => (
-                  <FormControl fullWidth>
-                    <InputLabel>Supplier</InputLabel>
-                    <Select
-                      label="Supplier"
-                      value={field.value}
-                      onChange={field.onChange}
-                      displayEmpty
-                    >
-                      <MenuItem value="">
-                        <em>None</em>
-                      </MenuItem>
-                      {suppliers.map((supplier) => (
-                        <MenuItem key={supplier.id} value={supplier.id}>
-                          {supplier.name}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                )}
-              />
             </Stack>
+
+            <Controller
+              name="supplierId"
+              control={control}
+              render={({ field }) => (
+                <FormControl fullWidth>
+                  <InputLabel>Supplier</InputLabel>
+                  <Select
+                    label="Supplier"
+                    value={field.value}
+                    onChange={field.onChange}
+                    displayEmpty
+                    sx={{ borderRadius: '10px' }}
+                  >
+                    <MenuItem value="">
+                      <em>None</em>
+                    </MenuItem>
+                    {suppliers.map((supplier) => (
+                      <MenuItem key={supplier.id} value={supplier.id}>
+                        {supplier.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
+            />
+
             <TextField
               label="Description"
+              placeholder="Product specs, notes, or storage conditions"
               fullWidth
               multiline
               minRows={2}
               {...register('description')}
               error={Boolean(errors.description)}
               helperText={errors.description?.message}
+              InputProps={{ sx: { borderRadius: '10px' } }}
             />
+
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
               <TextField
-                label="Price"
+                label="Unit Price"
                 type="number"
                 fullWidth
                 inputProps={{ min: 0, step: '0.01' }}
                 {...register('price')}
                 error={Boolean(errors.price)}
                 helperText={errors.price?.message}
+                InputProps={{ sx: { borderRadius: '10px' } }}
               />
               <TextField
-                label="Quantity"
+                label="Initial Quantity"
                 type="number"
                 fullWidth
                 inputProps={{ min: 0 }}
                 {...register('quantity')}
                 error={Boolean(errors.quantity)}
                 helperText={errors.quantity?.message}
+                InputProps={{ sx: { borderRadius: '10px' } }}
               />
               <TextField
-                label="Min stock"
+                label="Minimum Stock Threshold"
                 type="number"
                 fullWidth
                 inputProps={{ min: 0 }}
                 {...register('minStock')}
                 error={Boolean(errors.minStock)}
                 helperText={errors.minStock?.message}
+                InputProps={{ sx: { borderRadius: '10px' } }}
               />
             </Stack>
-            <Controller
-              name="active"
-              control={control}
-              render={({ field }) => (
-                <FormControlLabel
-                  control={<Switch checked={field.value} onChange={field.onChange} />}
-                  label="Active"
-                />
-              )}
-            />
+
+            <Box
+              sx={{
+                p: 2,
+                borderRadius: '12px',
+                bgcolor: (theme) =>
+                  theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.02)',
+                border: '1px solid',
+                borderColor: (theme) =>
+                  theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.05)',
+              }}
+            >
+              <Controller
+                name="active"
+                control={control}
+                render={({ field }) => (
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={field.value}
+                        onChange={field.onChange}
+                        color="primary"
+                      />
+                    }
+                    label={
+                      <Box>
+                        <Typography variant="body2" fontWeight={600}>
+                          Active in Catalog
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Inactive products are hidden from movements and stock operations
+                        </Typography>
+                      </Box>
+                    }
+                    sx={{ m: 0, width: '100%', justifyContent: 'space-between' }}
+                  />
+                )}
+              />
+            </Box>
           </Stack>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={onClose} color="inherit">
+
+        <DialogActions sx={{ px: 3, pb: 2.5, pt: 1, gap: 1 }}>
+          <Button
+            onClick={onClose}
+            sx={{
+              borderRadius: '10px',
+              textTransform: 'none',
+              fontWeight: 600,
+              color: 'text.secondary',
+            }}
+          >
             Cancel
           </Button>
-          <Button type="submit" variant="contained" disabled={isSubmitting}>
-            {product ? 'Save' : 'Create'}
+          <Button
+            type="submit"
+            variant="contained"
+            disabled={isSubmitting}
+            sx={{
+              borderRadius: '10px',
+              textTransform: 'none',
+              fontWeight: 600,
+              boxShadow: 'none',
+              px: 3,
+            }}
+          >
+            {product ? 'Save Changes' : 'Create Product'}
           </Button>
         </DialogActions>
       </form>

@@ -8,6 +8,7 @@ import {
   Button,
   Card,
   CardContent,
+  Divider,
   FormControl,
   FormControlLabel,
   Grid,
@@ -17,10 +18,13 @@ import {
   Stack,
   Switch,
   TextField,
-  Toolbar,
   Typography,
 } from '@mui/material'
-import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined'
+import SaveRoundedIcon from '@mui/icons-material/SaveRounded'
+import WarehouseOutlinedIcon from '@mui/icons-material/WarehouseOutlined'
+import CurrencyExchangeOutlinedIcon from '@mui/icons-material/CurrencyExchangeOutlined'
+import NotificationsActiveOutlinedIcon from '@mui/icons-material/NotificationsActiveOutlined'
+import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined'
 import { settingsApi } from '../api/settingsApi'
 import Loading from '../components/common/Loading'
 import type { SettingsRequest } from '../types'
@@ -41,7 +45,18 @@ const settingsSchema = z.object({
 type SettingsFormInput = z.input<typeof settingsSchema>
 type SettingsFormValues = z.output<typeof settingsSchema>
 
-const CURRENCIES = ['USD', 'EUR', 'GBP', 'INR', 'JPY', 'CAD', 'AUD', 'MAD', 'TND', 'CHF']
+const CURRENCIES = [
+  { code: 'INR', name: 'Indian Rupee (INR)' },
+  { code: 'USD', name: 'US Dollar (USD)' },
+  { code: 'EUR', name: 'Euro (EUR)' },
+  { code: 'GBP', name: 'British Pound (GBP)' },
+  { code: 'JPY', name: 'Japanese Yen (JPY)' },
+  { code: 'CAD', name: 'Canadian Dollar (CAD)' },
+  { code: 'AUD', name: 'Australian Dollar (AUD)' },
+  { code: 'CHF', name: 'Swiss Franc (CHF)' },
+  { code: 'MAD', name: 'Moroccan Dirham (MAD)' },
+  { code: 'TND', name: 'Tunisian Dinar (TND)' },
+]
 
 export default function Settings() {
   const [loading, setLoading] = useState(true)
@@ -99,7 +114,7 @@ export default function Settings() {
     }
     try {
       await settingsApi.update(request)
-      setSuccess('Settings saved')
+      setSuccess('Settings saved successfully')
     } catch {
       setError('Failed to save settings')
     }
@@ -110,87 +125,267 @@ export default function Settings() {
   }
 
   return (
-    <Box>
-      <Toolbar disableGutters>
-        <Typography variant="h5" fontWeight={600}>
-          Settings
+    <Box sx={{ maxWidth: 860, mx: 'auto', p: { xs: 2, sm: 3 } }}>
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h5" fontWeight={700} sx={{ letterSpacing: '-0.02em', mb: 0.25 }}>
+          System Settings
         </Typography>
-      </Toolbar>
+        <Typography variant="body2" color="text.secondary">
+          Configure facility identity, financial currency, and automated stock thresholds
+        </Typography>
+      </Box>
 
-      <Card variant="outlined" sx={{ maxWidth: 720 }}>
-        <CardContent>
+      {error && (
+        <Alert severity="error" sx={{ mb: 2.5, borderRadius: '12px' }}>
+          {error}
+        </Alert>
+      )}
+      {success && (
+        <Alert severity="success" sx={{ mb: 2.5, borderRadius: '12px' }}>
+          {success}
+        </Alert>
+      )}
+
+      <Card
+        sx={{
+          borderRadius: '16px',
+          border: '1px solid',
+          borderColor: (theme) =>
+            theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
+          boxShadow: (theme) =>
+            theme.palette.mode === 'dark' ? '0 1px 3px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.03)',
+        }}
+      >
+        <CardContent sx={{ p: { xs: 2.5, sm: 3.5 } }}>
           <form onSubmit={handleSubmit(submit)} noValidate>
-            <Stack spacing={2.5}>
-              {error && <Alert severity="error">{error}</Alert>}
-              {success && <Alert severity="success">{success}</Alert>}
+            <Stack spacing={3.5}>
+              {/* Facility Identity */}
+              <Box>
+                <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
+                  <Box
+                    sx={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      bgcolor: (theme) =>
+                        theme.palette.mode === 'dark' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(5, 150, 105, 0.1)',
+                      color: 'primary.main',
+                    }}
+                  >
+                    <WarehouseOutlinedIcon sx={{ fontSize: 18 }} />
+                  </Box>
+                  <Box>
+                    <Typography variant="subtitle1" fontWeight={700}>
+                      Facility Profile
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Identity shown on generated PDF reports and export manifests
+                    </Typography>
+                  </Box>
+                </Stack>
+                <TextField
+                  label="Warehouse Facility Name"
+                  fullWidth
+                  {...register('warehouseName')}
+                  error={Boolean(errors.warehouseName)}
+                  helperText={errors.warehouseName?.message}
+                  InputProps={{ sx: { borderRadius: '10px' } }}
+                />
+              </Box>
 
-              <TextField
-                label="Warehouse name"
-                fullWidth
-                {...register('warehouseName')}
-                error={Boolean(errors.warehouseName)}
-                helperText={errors.warehouseName?.message}
-              />
+              <Divider />
 
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
+              {/* Localization and Currency */}
+              <Box>
+                <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
+                  <Box
+                    sx={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      bgcolor: (theme) =>
+                        theme.palette.mode === 'dark' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(37, 99, 235, 0.1)',
+                      color: 'info.main',
+                    }}
+                  >
+                    <CurrencyExchangeOutlinedIcon sx={{ fontSize: 18 }} />
+                  </Box>
+                  <Box>
+                    <Typography variant="subtitle1" fontWeight={700}>
+                      Localization & Currency
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Currency symbol applied to inventory valuations, product prices, and reports
+                    </Typography>
+                  </Box>
+                </Stack>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <Controller
+                      name="currency"
+                      control={control}
+                      render={({ field }) => (
+                        <FormControl fullWidth>
+                          <InputLabel>Base Currency</InputLabel>
+                          <Select
+                            label="Base Currency"
+                            value={field.value}
+                            onChange={field.onChange}
+                            error={Boolean(errors.currency)}
+                            sx={{ borderRadius: '10px' }}
+                          >
+                            {CURRENCIES.map((curr) => (
+                              <MenuItem key={curr.code} value={curr.code}>
+                                {curr.name}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      )}
+                    />
+                  </Grid>
+                </Grid>
+              </Box>
+
+              <Divider />
+
+              {/* Thresholds and Alerts */}
+              <Box>
+                <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
+                  <Box
+                    sx={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      bgcolor: (theme) =>
+                        theme.palette.mode === 'dark' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(217, 119, 6, 0.1)',
+                      color: 'warning.main',
+                    }}
+                  >
+                    <TuneOutlinedIcon sx={{ fontSize: 18 }} />
+                  </Box>
+                  <Box>
+                    <Typography variant="subtitle1" fontWeight={700}>
+                      Stock Thresholds
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Default baseline quantity before items trigger warning status
+                    </Typography>
+                  </Box>
+                </Stack>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      label="Global Low Stock Threshold"
+                      type="number"
+                      fullWidth
+                      inputProps={{ min: 0 }}
+                      {...register('lowStockThreshold')}
+                      error={Boolean(errors.lowStockThreshold)}
+                      helperText={
+                        errors.lowStockThreshold?.message ||
+                        'Products below this quantity trigger low stock status if no SKU threshold is set'
+                      }
+                      InputProps={{ sx: { borderRadius: '10px' } }}
+                    />
+                  </Grid>
+                </Grid>
+              </Box>
+
+              <Divider />
+
+              {/* Notifications Toggle */}
+              <Box>
+                <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
+                  <Box
+                    sx={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      bgcolor: (theme) =>
+                        theme.palette.mode === 'dark' ? 'rgba(168, 85, 247, 0.15)' : 'rgba(124, 58, 237, 0.1)',
+                      color: 'secondary.main',
+                    }}
+                  >
+                    <NotificationsActiveOutlinedIcon sx={{ fontSize: 18 }} />
+                  </Box>
+                  <Box>
+                    <Typography variant="subtitle1" fontWeight={700}>
+                      Real-time Stock Alerts
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Live STOMP WebSocket broadcast delivery to active operators
+                    </Typography>
+                  </Box>
+                </Stack>
+                <Box
+                  sx={{
+                    p: 2,
+                    borderRadius: '12px',
+                    bgcolor: (theme) =>
+                      theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.02)',
+                    border: '1px solid',
+                    borderColor: (theme) =>
+                      theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.05)',
+                  }}
+                >
                   <Controller
-                    name="currency"
+                    name="notificationsEnabled"
                     control={control}
                     render={({ field }) => (
-                      <FormControl fullWidth>
-                        <InputLabel>Currency</InputLabel>
-                        <Select
-                          label="Currency"
-                          value={field.value}
-                          onChange={field.onChange}
-                          error={Boolean(errors.currency)}
-                        >
-                          {CURRENCIES.map((code) => (
-                            <MenuItem key={code} value={code}>
-                              {code}
-                            </MenuItem>
-                          ))}
-                        </Select>
-                      </FormControl>
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            checked={field.value}
+                            onChange={field.onChange}
+                            color="primary"
+                          />
+                        }
+                        label={
+                          <Box>
+                            <Typography variant="body2" fontWeight={600}>
+                              Broadcast Low-Stock Push Alerts
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              Deliver instant notification cards to connected browsers when inventory decreases below threshold
+                            </Typography>
+                          </Box>
+                        }
+                        sx={{ m: 0, width: '100%', justifyContent: 'space-between' }}
+                      />
                     )}
                   />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    label="Low stock threshold"
-                    type="number"
-                    fullWidth
-                    inputProps={{ min: 0 }}
-                    {...register('lowStockThreshold')}
-                    error={Boolean(errors.lowStockThreshold)}
-                    helperText={
-                      errors.lowStockThreshold?.message ??
-                      'Products at or below this quantity are flagged as low stock alerts'
-                    }
-                  />
-                </Grid>
-              </Grid>
+                </Box>
+              </Box>
 
-              <Controller
-                name="notificationsEnabled"
-                control={control}
-                render={({ field }) => (
-                  <FormControlLabel
-                    control={<Switch checked={field.value} onChange={field.onChange} />}
-                    label="Enable low stock notifications"
-                  />
-                )}
-              />
-
-              <Box>
+              <Box sx={{ pt: 1, display: 'flex', justifyContent: 'flex-end' }}>
                 <Button
                   type="submit"
                   variant="contained"
-                  startIcon={<SaveOutlinedIcon />}
+                  startIcon={<SaveRoundedIcon />}
                   disabled={isSubmitting}
+                  sx={{
+                    borderRadius: '10px',
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    boxShadow: 'none',
+                    px: 3.5,
+                    py: 1,
+                  }}
                 >
-                  Save settings
+                  Save Settings
                 </Button>
               </Box>
             </Stack>

@@ -6,18 +6,22 @@ import {
   Chip,
   FormControl,
   IconButton,
+  InputAdornment,
   InputLabel,
   MenuItem,
   Select,
   Stack,
   TextField,
-  Toolbar,
+  Tooltip,
   Typography,
+  useTheme,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
+import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined'
+import toast from 'react-hot-toast'
 import { productApi } from '../api/productApi'
 import { categoryApi } from '../api/categoryApi'
 import { reportApi } from '../api/reportApi'
@@ -35,9 +39,9 @@ const STATUS_CONFIG: Record<ProductStatus, { label: string; color: 'success' | '
   OUT_OF_STOCK: { label: 'Out of stock', color: 'error' },
 }
 
-const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
-
 export default function Products() {
+  const theme = useTheme()
+  const isLight = theme.palette.mode === 'light'
   const [currencyCode, setCurrencyCode] = useState('USD')
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebounce(search)
@@ -113,8 +117,10 @@ export default function Products() {
     try {
       if (editing) {
         await productApi.update(editing.id, data)
+        toast.success(`Updated ${data.name}`)
       } else {
         await productApi.create(data)
+        toast.success(`Created ${data.name}`)
       }
       setDialogOpen(false)
       fetchProducts()
@@ -130,10 +136,11 @@ export default function Products() {
     if (!deleting) return
     try {
       await productApi.delete(deleting.id)
+      toast.success(`Deleted ${deleting.name}`)
       setDeleting(null)
       fetchProducts()
     } catch {
-      setError('Failed to delete product')
+      toast.error('Failed to delete product')
       setDeleting(null)
     }
   }
@@ -146,38 +153,95 @@ export default function Products() {
         status: (statusFilter as ProductStatus) || undefined,
       })
       downloadBlob(blob, 'products.csv')
+      toast.success('Product catalog exported')
     } catch {
-      setError('Failed to export products')
+      toast.error('Failed to export products')
     }
   }
 
   const columns: Column<Product>[] = [
-    { id: 'name', label: 'Name', render: (row) => <b>{row.name}</b> },
-    { id: 'sku', label: 'SKU', render: (row) => <span style={{ fontFamily: 'monospace' }}>{row.sku}</span> },
-    { id: 'categoryName', label: 'Category', render: (row) => row.categoryName ?? '—' },
-    { id: 'supplierName', label: 'Supplier', render: (row) => row.supplierName ?? '—' },
+    {
+      id: 'name',
+      label: 'Product Name',
+      render: (row) => (
+        <Typography variant="body2" fontWeight={600}>
+          {row.name}
+        </Typography>
+      ),
+    },
+    {
+      id: 'sku',
+      label: 'SKU',
+      render: (row) => (
+        <Typography
+          component="span"
+          sx={{
+            fontFamily: 'SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+            fontSize: '0.8rem',
+            color: 'text.secondary',
+            bgcolor: isLight ? 'rgba(0, 0, 0, 0.04)' : 'rgba(255, 255, 255, 0.06)',
+            px: 0.85,
+            py: 0.35,
+            borderRadius: '6px',
+          }}
+        >
+          {row.sku}
+        </Typography>
+      ),
+    },
+    {
+      id: 'categoryName',
+      label: 'Category',
+      render: (row) => (
+        <Typography variant="body2" color="text.secondary">
+          {row.categoryName || 'None'}
+        </Typography>
+      ),
+    },
+    {
+      id: 'supplierName',
+      label: 'Supplier',
+      render: (row) => (
+        <Typography variant="body2" color="text.secondary">
+          {row.supplierName || 'None'}
+        </Typography>
+      ),
+    },
     {
       id: 'price',
-      label: 'Price',
+      label: 'Unit Price',
       align: 'right',
       render: (row) => {
         try {
-          return new Intl.NumberFormat(currencyCode === 'INR' ? 'en-IN' : 'en-US', {
-            style: 'currency',
-            currency: currencyCode,
-          }).format(row.price)
+          return (
+            <Typography variant="body2" fontWeight={600}>
+              {new Intl.NumberFormat(currencyCode === 'INR' ? 'en-IN' : 'en-US', {
+                style: 'currency',
+                currency: currencyCode,
+              }).format(row.price)}
+            </Typography>
+          )
         } catch {
           return `${currencyCode} ${Number(row.price || 0).toFixed(2)}`
         }
       },
     },
-    { id: 'quantity', label: 'Qty', align: 'right', render: (row) => row.quantity },
+    {
+      id: 'quantity',
+      label: 'Stock',
+      align: 'right',
+      render: (row) => (
+        <Typography variant="body2" fontWeight={700}>
+          {row.quantity}
+        </Typography>
+      ),
+    },
     {
       id: 'status',
       label: 'Status',
       render: (row) => {
         const config = STATUS_CONFIG[row.status]
-        return <Chip label={config.label} color={config.color} size="small" />
+        return <Chip label={config.label} color={config.color} size="small" sx={{ fontWeight: 600, height: 22 }} />
       },
     },
     {
@@ -186,12 +250,32 @@ export default function Products() {
       align: 'right',
       render: (row) => (
         <Stack direction="row" spacing={0.5} justifyContent="flex-end">
-          <IconButton size="small" onClick={() => openEdit(row)}>
-            <EditOutlinedIcon fontSize="small" />
-          </IconButton>
-          <IconButton size="small" color="error" onClick={() => setDeleting(row)}>
-            <DeleteOutlineIcon fontSize="small" />
-          </IconButton>
+          <Tooltip title="Edit Product">
+            <IconButton
+              size="small"
+              onClick={() => openEdit(row)}
+              sx={{
+                borderRadius: '8px',
+                color: 'text.secondary',
+                '&:hover': { color: 'primary.main', bgcolor: 'rgba(5, 150, 105, 0.08)' },
+              }}
+            >
+              <EditOutlinedIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Delete Product">
+            <IconButton
+              size="small"
+              color="error"
+              onClick={() => setDeleting(row)}
+              sx={{
+                borderRadius: '8px',
+                '&:hover': { bgcolor: 'rgba(225, 29, 72, 0.08)' },
+              }}
+            >
+              <DeleteOutlineIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
         </Stack>
       ),
     },
@@ -199,104 +283,118 @@ export default function Products() {
 
   return (
     <Box>
-      <Toolbar disableGutters sx={{ justifyContent: 'space-between' }}>
-        <Typography variant="h5" fontWeight={600}>
-          Products
-        </Typography>
-        <Stack direction="row" spacing={1}>
+      {/* Page Header */}
+      <Stack
+        direction={{ xs: 'column', sm: 'row' }}
+        justifyContent="space-between"
+        alignItems={{ xs: 'flex-start', sm: 'center' }}
+        spacing={2}
+        sx={{ mb: 3 }}
+      >
+        <Box>
+          <Typography variant="h5" fontWeight={700} sx={{ letterSpacing: '-0.025em' }}>
+            Product Catalog
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Manage SKU listings, pricing, taxonomies, and vendor associations
+          </Typography>
+        </Box>
+        <Stack direction="row" spacing={1.5}>
           <Button
             variant="outlined"
             startIcon={<FileDownloadOutlinedIcon />}
             onClick={handleExport}
+            sx={{ borderRadius: '10px' }}
           >
             Export
           </Button>
-          <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
-            New product
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={openCreate}
+            sx={{ borderRadius: '10px' }}
+          >
+            New Product
           </Button>
         </Stack>
-      </Toolbar>
-
-      <Stack
-        direction={{ xs: 'column', sm: 'row' }}
-        spacing={2}
-        sx={{ my: 2 }}
-        alignItems="center"
-        flexWrap="wrap"
-      >
-        <TextField
-          label="Search"
-          placeholder="Search by name or SKU"
-          size="small"
-          sx={{ minWidth: 240 }}
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value)
-            setPage(0)
-          }}
-        />
-        <FormControl size="small" sx={{ minWidth: 180 }}>
-          <InputLabel>Category</InputLabel>
-          <Select
-            label="Category"
-            value={categoryFilter}
-            onChange={(e) => {
-              setCategoryFilter(e.target.value)
-              setPage(0)
-            }}
-          >
-            <MenuItem value="">All</MenuItem>
-            {categories.map((category) => (
-              <MenuItem key={category.id} value={category.id}>
-                {category.name}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        <FormControl size="small" sx={{ minWidth: 160 }}>
-          <InputLabel>Status</InputLabel>
-          <Select
-            label="Status"
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value)
-              setPage(0)
-            }}
-          >
-            <MenuItem value="">All</MenuItem>
-            <MenuItem value="IN_STOCK">In stock</MenuItem>
-            <MenuItem value="LOW_STOCK">Low stock</MenuItem>
-            <MenuItem value="OUT_OF_STOCK">Out of stock</MenuItem>
-          </Select>
-        </FormControl>
-        <FormControl size="small" sx={{ minWidth: 160 }}>
-          <InputLabel>Sort by</InputLabel>
-          <Select value={sortBy} label="Sort by" onChange={(e) => setSortBy(e.target.value)}>
-            <MenuItem value="name">Name</MenuItem>
-            <MenuItem value="sku">SKU</MenuItem>
-            <MenuItem value="price">Price</MenuItem>
-            <MenuItem value="quantity">Quantity</MenuItem>
-          </Select>
-        </FormControl>
-        <FormControl size="small" sx={{ minWidth: 120 }}>
-          <InputLabel>Direction</InputLabel>
-          <Select
-            value={direction}
-            label="Direction"
-            onChange={(e) => setDirection(e.target.value as 'asc' | 'desc')}
-          >
-            <MenuItem value="asc">Ascending</MenuItem>
-            <MenuItem value="desc">Descending</MenuItem>
-          </Select>
-        </FormControl>
       </Stack>
 
+      {/* Filter Toolbar */}
+      <Box
+        sx={{
+          p: 2,
+          mb: 2.5,
+          borderRadius: '16px',
+          bgcolor: 'background.paper',
+          border: `1px solid ${isLight ? 'rgba(0, 0, 0, 0.06)' : 'rgba(255, 255, 255, 0.07)'}`,
+          boxShadow: isLight ? '0 1px 3px rgba(0, 0, 0, 0.02)' : 'none',
+        }}
+      >
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="center">
+          <TextField
+            placeholder="Search by product name or SKU..."
+            size="small"
+            fullWidth
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value)
+              setPage(0)
+            }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchOutlinedIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                </InputAdornment>
+              ),
+            }}
+            sx={{ flexGrow: 1 }}
+          />
+
+          <FormControl size="small" sx={{ minWidth: 170, width: { xs: '100%', md: 'auto' } }}>
+            <InputLabel>Category</InputLabel>
+            <Select
+              label="Category"
+              value={categoryFilter}
+              onChange={(e) => {
+                setCategoryFilter(e.target.value)
+                setPage(0)
+              }}
+            >
+              <MenuItem value="">All Categories</MenuItem>
+              {categories.map((category) => (
+                <MenuItem key={category.id} value={category.id}>
+                  {category.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <FormControl size="small" sx={{ minWidth: 150, width: { xs: '100%', md: 'auto' } }}>
+            <InputLabel>Status</InputLabel>
+            <Select
+              label="Status"
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value)
+                setPage(0)
+              }}
+            >
+              <MenuItem value="">All Statuses</MenuItem>
+              <MenuItem value="IN_STOCK">In Stock</MenuItem>
+              <MenuItem value="LOW_STOCK">Low Stock</MenuItem>
+              <MenuItem value="OUT_OF_STOCK">Out of Stock</MenuItem>
+            </Select>
+          </FormControl>
+        </Stack>
+      </Box>
+
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
+        <Alert severity="error" sx={{ mb: 2.5, borderRadius: '12px' }}>
           {error}
         </Alert>
       )}
 
+      {/* Products Table */}
       <DataTable
         columns={columns}
         rows={rows}
@@ -304,6 +402,7 @@ export default function Products() {
         page={page}
         pageSize={size}
         total={total}
+        emptyMessage="No products found in the catalog."
         onPageChange={(newPage) => {
           setPage(newPage)
           fetchProducts()
@@ -315,18 +414,21 @@ export default function Products() {
         }}
       />
 
+      {/* Product Form Modal */}
       <ProductFormDialog
         open={dialogOpen}
-        product={editing}
+        editing={editing}
+        categories={categories}
         error={dialogError}
         onClose={() => setDialogOpen(false)}
         onSubmit={handleSubmit}
       />
 
+      {/* Delete Confirmation Modal */}
       <ConfirmDialog
         open={Boolean(deleting)}
-        title="Delete product"
-        message={`Are you sure you want to delete "${deleting?.name}"?`}
+        title="Delete Product"
+        message={`Are you sure you want to delete "${deleting?.name}"? This action cannot be undone.`}
         onConfirm={handleDelete}
         onCancel={() => setDeleting(null)}
       />

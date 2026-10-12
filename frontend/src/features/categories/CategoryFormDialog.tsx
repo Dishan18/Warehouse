@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
   Alert,
+  Box,
   Button,
   Dialog,
   DialogActions,
@@ -13,6 +14,7 @@ import {
   Stack,
   Switch,
   TextField,
+  Typography,
 } from '@mui/material'
 import type { Category, CategoryRequest } from '../../types'
 
@@ -72,48 +74,131 @@ export default function CategoryFormDialog({
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>{category ? 'Edit category' : 'New category'}</DialogTitle>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="sm"
+      fullWidth
+      PaperProps={{
+        sx: {
+          borderRadius: '18px',
+          border: '1px solid',
+          borderColor: (theme) =>
+            theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.08)',
+          boxShadow: (theme) =>
+            theme.palette.mode === 'dark'
+              ? '0 24px 48px -12px rgba(0, 0, 0, 0.6)'
+              : '0 20px 40px -12px rgba(0, 0, 0, 0.12)',
+        },
+      }}
+    >
+      <DialogTitle sx={{ pb: 1, pt: 2.5, px: 3 }}>
+        <Typography variant="h6" fontWeight={700} sx={{ letterSpacing: '-0.01em' }}>
+          {category ? 'Edit Category' : 'New Category'}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          {category ? 'Update classification details and catalog status' : 'Define a new product classification group'}
+        </Typography>
+      </DialogTitle>
+
       <form onSubmit={handleSubmit(submit)} noValidate>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            {error && <Alert severity="error">{error}</Alert>}
+        <DialogContent sx={{ px: 3, py: 2 }}>
+          <Stack spacing={2.5}>
+            {error && (
+              <Alert severity="error" sx={{ borderRadius: '10px' }}>
+                {error}
+              </Alert>
+            )}
+
             <TextField
-              label="Name"
+              label="Category Name"
+              placeholder="e.g. Peripherals, Audio, Storage"
               fullWidth
+              autoFocus
               {...register('name')}
               error={Boolean(errors.name)}
               helperText={errors.name?.message}
+              InputProps={{ sx: { borderRadius: '10px' } }}
             />
+
             <TextField
               label="Description"
+              placeholder="Brief description of products in this category"
               fullWidth
               multiline
               minRows={3}
               {...register('description')}
               error={Boolean(errors.description)}
               helperText={errors.description?.message}
+              InputProps={{ sx: { borderRadius: '10px' } }}
             />
-            <Controller
-              name="active"
-              control={control}
-              render={({ field }) => (
-                <FormControlLabel
-                  control={
-                    <Switch checked={field.value} onChange={field.onChange} />
-                  }
-                  label="Active"
-                />
-              )}
-            />
+
+            <Box
+              sx={{
+                p: 2,
+                borderRadius: '12px',
+                bgcolor: (theme) =>
+                  theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.02)',
+                border: '1px solid',
+                borderColor: (theme) =>
+                  theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.05)',
+              }}
+            >
+              <Controller
+                name="active"
+                control={control}
+                render={({ field }) => (
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={field.value}
+                        onChange={field.onChange}
+                        color="primary"
+                      />
+                    }
+                    label={
+                      <Box>
+                        <Typography variant="body2" fontWeight={600}>
+                          Active Category
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Inactive categories will be hidden from new product creation
+                        </Typography>
+                      </Box>
+                    }
+                    sx={{ m: 0, width: '100%', justifyContent: 'space-between' }}
+                  />
+                )}
+              />
+            </Box>
           </Stack>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={onClose} color="inherit">
+
+        <DialogActions sx={{ px: 3, pb: 2.5, pt: 1, gap: 1 }}>
+          <Button
+            onClick={onClose}
+            sx={{
+              borderRadius: '10px',
+              textTransform: 'none',
+              fontWeight: 600,
+              color: 'text.secondary',
+            }}
+          >
             Cancel
           </Button>
-          <Button type="submit" variant="contained" disabled={isSubmitting}>
-            {category ? 'Save' : 'Create'}
+          <Button
+            type="submit"
+            variant="contained"
+            disabled={isSubmitting}
+            sx={{
+              borderRadius: '10px',
+              textTransform: 'none',
+              fontWeight: 600,
+              boxShadow: 'none',
+              px: 3,
+            }}
+          >
+            {category ? 'Save Changes' : 'Create Category'}
           </Button>
         </DialogActions>
       </form>

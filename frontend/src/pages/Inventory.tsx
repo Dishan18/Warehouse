@@ -5,16 +5,19 @@ import {
   Button,
   Chip,
   IconButton,
-  Snackbar,
+  InputAdornment,
   Stack,
   TextField,
-  Toolbar,
+  Tooltip,
   Typography,
+  useTheme,
 } from '@mui/material'
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline'
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline'
 import TuneIcon from '@mui/icons-material/Tune'
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined'
+import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined'
+import toast from 'react-hot-toast'
 import { productApi } from '../api/productApi'
 import { reportApi } from '../api/reportApi'
 import { downloadBlob } from '../utils/download'
@@ -30,6 +33,8 @@ const STATUS_CONFIG: Record<ProductStatus, { label: string; color: 'success' | '
 }
 
 export default function Inventory() {
+  const theme = useTheme()
+  const isLight = theme.palette.mode === 'light'
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebounce(search)
   const [page, setPage] = useState(0)
@@ -43,7 +48,6 @@ export default function Inventory() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [selected, setSelected] = useState<Product | null>(null)
   const [movementType, setMovementType] = useState<MovementType>('INBOUND')
-  const [snackbar, setSnackbar] = useState<string | null>(null)
 
   const fetchProducts = useCallback(async () => {
     setLoading(true)
@@ -79,23 +83,79 @@ export default function Inventory() {
     try {
       const blob = await reportApi.exportInventory()
       downloadBlob(blob, 'inventory.csv')
+      toast.success('Inventory report exported')
     } catch {
-      setError('Failed to export inventory')
+      toast.error('Failed to export inventory')
     }
   }
 
   const columns: Column<Product>[] = [
-    { id: 'name', label: 'Name', render: (row) => <b>{row.name}</b> },
-    { id: 'sku', label: 'SKU', render: (row) => <span style={{ fontFamily: 'monospace' }}>{row.sku}</span> },
-    { id: 'categoryName', label: 'Category', render: (row) => row.categoryName ?? '—' },
-    { id: 'quantity', label: 'Qty', align: 'right', render: (row) => row.quantity },
-    { id: 'minStock', label: 'Min', align: 'right', render: (row) => row.minStock },
+    {
+      id: 'name',
+      label: 'Product',
+      render: (row) => (
+        <Box>
+          <Typography variant="body2" fontWeight={600}>
+            {row.name}
+          </Typography>
+        </Box>
+      ),
+    },
+    {
+      id: 'sku',
+      label: 'SKU',
+      render: (row) => (
+        <Typography
+          component="span"
+          sx={{
+            fontFamily: 'SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+            fontSize: '0.8rem',
+            color: 'text.secondary',
+            bgcolor: isLight ? 'rgba(0, 0, 0, 0.04)' : 'rgba(255, 255, 255, 0.06)',
+            px: 0.85,
+            py: 0.35,
+            borderRadius: '6px',
+          }}
+        >
+          {row.sku}
+        </Typography>
+      ),
+    },
+    {
+      id: 'categoryName',
+      label: 'Category',
+      render: (row) => (
+        <Typography variant="body2" color="text.secondary">
+          {row.categoryName || 'Unassigned'}
+        </Typography>
+      ),
+    },
+    {
+      id: 'quantity',
+      label: 'On Hand',
+      align: 'right',
+      render: (row) => (
+        <Typography variant="body2" fontWeight={700}>
+          {row.quantity}
+        </Typography>
+      ),
+    },
+    {
+      id: 'minStock',
+      label: 'Min Threshold',
+      align: 'right',
+      render: (row) => (
+        <Typography variant="body2" color="text.secondary">
+          {row.minStock}
+        </Typography>
+      ),
+    },
     {
       id: 'status',
       label: 'Status',
       render: (row) => {
         const config = STATUS_CONFIG[row.status]
-        return <Chip label={config.label} color={config.color} size="small" />
+        return <Chip label={config.label} color={config.color} size="small" sx={{ fontWeight: 600, height: 22 }} />
       },
     },
     {
@@ -104,30 +164,57 @@ export default function Inventory() {
       align: 'right',
       render: (row) => (
         <Stack direction="row" spacing={0.5} justifyContent="flex-end">
-          <IconButton
-            size="small"
-            color="success"
-            title="Stock in"
-            onClick={() => openMovement(row, 'INBOUND')}
-          >
-            <AddCircleOutlineIcon fontSize="small" />
-          </IconButton>
-          <IconButton
-            size="small"
-            color="error"
-            title="Stock out"
-            onClick={() => openMovement(row, 'OUTBOUND')}
-          >
-            <RemoveCircleOutlineIcon fontSize="small" />
-          </IconButton>
-          <IconButton
-            size="small"
-            color="warning"
-            title="Adjust"
-            onClick={() => openMovement(row, 'ADJUSTMENT')}
-          >
-            <TuneIcon fontSize="small" />
-          </IconButton>
+          <Tooltip title="Inbound (Receive stock)">
+            <IconButton
+              size="small"
+              onClick={() => openMovement(row, 'INBOUND')}
+              sx={{
+                color: 'success.main',
+                bgcolor: isLight ? 'rgba(5, 150, 105, 0.08)' : 'rgba(52, 211, 153, 0.12)',
+                borderRadius: '8px',
+                p: 0.65,
+                '&:hover': {
+                  bgcolor: isLight ? 'rgba(5, 150, 105, 0.16)' : 'rgba(52, 211, 153, 0.22)',
+                },
+              }}
+            >
+              <AddCircleOutlineIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Outbound (Dispatch stock)">
+            <IconButton
+              size="small"
+              onClick={() => openMovement(row, 'OUTBOUND')}
+              sx={{
+                color: 'error.main',
+                bgcolor: isLight ? 'rgba(225, 29, 72, 0.08)' : 'rgba(244, 63, 94, 0.12)',
+                borderRadius: '8px',
+                p: 0.65,
+                '&:hover': {
+                  bgcolor: isLight ? 'rgba(225, 29, 72, 0.16)' : 'rgba(244, 63, 94, 0.22)',
+                },
+              }}
+            >
+              <RemoveCircleOutlineIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Stock Adjustment (Recount)">
+            <IconButton
+              size="small"
+              onClick={() => openMovement(row, 'ADJUSTMENT')}
+              sx={{
+                color: 'warning.main',
+                bgcolor: isLight ? 'rgba(217, 119, 6, 0.08)' : 'rgba(245, 158, 11, 0.12)',
+                borderRadius: '8px',
+                p: 0.65,
+                '&:hover': {
+                  bgcolor: isLight ? 'rgba(217, 119, 6, 0.16)' : 'rgba(245, 158, 11, 0.22)',
+                },
+              }}
+            >
+              <TuneIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
         </Stack>
       ),
     },
@@ -135,42 +222,75 @@ export default function Inventory() {
 
   return (
     <Box>
-      <Toolbar disableGutters sx={{ justifyContent: 'space-between' }}>
-        <Typography variant="h5" fontWeight={600}>
-          Inventory
-        </Typography>
+      {/* Header bar */}
+      <Stack
+        direction={{ xs: 'column', sm: 'row' }}
+        justifyContent="space-between"
+        alignItems={{ xs: 'flex-start', sm: 'center' }}
+        spacing={2}
+        sx={{ mb: 3 }}
+      >
+        <Box>
+          <Typography variant="h5" fontWeight={700} sx={{ letterSpacing: '-0.025em' }}>
+            Live Inventory
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Inspect real-time balances, receive stock, or log dispatches
+          </Typography>
+        </Box>
         <Button
           variant="outlined"
           startIcon={<FileDownloadOutlinedIcon />}
           onClick={handleExport}
+          sx={{ borderRadius: '10px' }}
         >
-          Export
+          Export CSV
         </Button>
-      </Toolbar>
-
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ my: 2 }} alignItems="center">
-        <TextField
-          label="Search"
-          placeholder="Search by name or SKU"
-          size="small"
-          sx={{ minWidth: 260 }}
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value)
-            setPage(0)
-          }}
-        />
-        <Typography variant="body2" color="text.secondary">
-          Use the icons to receive, dispatch or adjust stock for a product.
-        </Typography>
       </Stack>
 
+      {/* Filter and Search Bar */}
+      <Box
+        sx={{
+          p: 1.75,
+          mb: 2.5,
+          borderRadius: '14px',
+          bgcolor: 'background.paper',
+          border: `1px solid ${isLight ? 'rgba(0, 0, 0, 0.06)' : 'rgba(255, 255, 255, 0.07)'}`,
+          boxShadow: isLight ? '0 1px 3px rgba(0, 0, 0, 0.02)' : 'none',
+        }}
+      >
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="center">
+          <TextField
+            placeholder="Search products by name or SKU..."
+            size="small"
+            fullWidth
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value)
+              setPage(0)
+            }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchOutlinedIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                </InputAdornment>
+              ),
+            }}
+            sx={{ maxWidth: { sm: 380 } }}
+          />
+          <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', md: 'block' } }}>
+            Click action icons on any row to trigger an Inbound, Outbound, or Adjustment operation.
+          </Typography>
+        </Stack>
+      </Box>
+
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
+        <Alert severity="error" sx={{ mb: 2.5, borderRadius: '12px' }}>
           {error}
         </Alert>
       )}
 
+      {/* Main Table */}
       <DataTable
         columns={columns}
         rows={rows}
@@ -178,6 +298,7 @@ export default function Inventory() {
         page={page}
         pageSize={size}
         total={total}
+        emptyMessage="No inventory products matched your filter."
         onPageChange={(newPage) => {
           setPage(newPage)
           fetchProducts()
@@ -189,6 +310,7 @@ export default function Inventory() {
         }}
       />
 
+      {/* Movement Modal */}
       <MovementDialog
         open={dialogOpen}
         product={selected}
@@ -196,16 +318,9 @@ export default function Inventory() {
         onClose={() => setDialogOpen(false)}
         onSuccess={(message) => {
           setDialogOpen(false)
-          setSnackbar(message)
+          toast.success(message)
           fetchProducts()
         }}
-      />
-
-      <Snackbar
-        open={Boolean(snackbar)}
-        autoHideDuration={4000}
-        onClose={() => setSnackbar(null)}
-        message={snackbar}
       />
     </Box>
   )

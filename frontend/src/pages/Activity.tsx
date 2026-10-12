@@ -3,25 +3,51 @@ import {
   Alert,
   Box,
   Chip,
+  IconButton,
+  InputAdornment,
   Stack,
   TextField,
-  Toolbar,
   Typography,
 } from '@mui/material'
+import SearchRoundedIcon from '@mui/icons-material/SearchRounded'
+import ClearRoundedIcon from '@mui/icons-material/ClearRounded'
+import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded'
+import PersonOutlineRoundedIcon from '@mui/icons-material/PersonOutlineRounded'
 import { auditLogApi } from '../api/auditLogApi'
 import type { AuditLogEntry } from '../types'
 import DataTable, { type Column } from '../components/common/DataTable'
 import { useDebounce } from '../hooks/useDebounce'
 
-const ACTION_COLORS: Record<string, 'success' | 'warning' | 'error' | 'info' | 'default'> = {
-  CREATE: 'success',
-  UPDATE: 'info',
-  DELETE: 'error',
-  INBOUND: 'success',
-  OUTBOUND: 'warning',
-  ADJUSTMENT: 'info',
-  LOGIN: 'default',
-  REGISTER: 'default',
+function getActionChip(action: string) {
+  switch (action) {
+    case 'CREATE':
+    case 'INBOUND':
+      return {
+        bgcolor: 'rgba(16, 185, 129, 0.12)',
+        color: '#10b981',
+      }
+    case 'UPDATE':
+    case 'ADJUSTMENT':
+      return {
+        bgcolor: 'rgba(59, 130, 246, 0.12)',
+        color: '#3b82f6',
+      }
+    case 'DELETE':
+      return {
+        bgcolor: 'rgba(239, 68, 68, 0.12)',
+        color: '#ef4444',
+      }
+    case 'OUTBOUND':
+      return {
+        bgcolor: 'rgba(245, 158, 11, 0.12)',
+        color: '#f59e0b',
+      }
+    default:
+      return {
+        bgcolor: 'rgba(107, 114, 128, 0.12)',
+        color: '#6b7280',
+      }
+  }
 }
 
 const dateTime = new Intl.DateTimeFormat('en-GB', {
@@ -67,73 +93,138 @@ export default function Activity() {
   const columns: Column<AuditLogEntry>[] = [
     {
       id: 'createdAt',
-      label: 'Time',
+      label: 'Timestamp',
       render: (row) => (
-        <Typography variant="body2" sx={{ whiteSpace: 'nowrap' }}>
-          {dateTime.format(new Date(row.createdAt))}
-        </Typography>
+        <Stack direction="row" spacing={1} alignItems="center">
+          <AccessTimeRoundedIcon sx={{ fontSize: 15, color: 'text.secondary' }} />
+          <Typography variant="body2" sx={{ whiteSpace: 'nowrap' }} color="text.primary">
+            {dateTime.format(new Date(row.createdAt))}
+          </Typography>
+        </Stack>
       ),
     },
     {
       id: 'action',
       label: 'Action',
-      render: (row) => (
-        <Chip
-          label={row.action}
-          color={ACTION_COLORS[row.action] ?? 'default'}
-          size="small"
-        />
-      ),
+      render: (row) => {
+        const style = getActionChip(row.action)
+        return (
+          <Chip
+            label={row.action}
+            size="small"
+            sx={{
+              fontWeight: 700,
+              fontSize: '0.7rem',
+              borderRadius: '6px',
+              bgcolor: style.bgcolor,
+              color: style.color,
+              border: 'none',
+              letterSpacing: '0.02em',
+            }}
+          />
+        )
+      },
     },
     {
       id: 'entityType',
       label: 'Entity',
       render: (row) => (
-        <Typography variant="body2" sx={{ whiteSpace: 'nowrap' }}>
-          {row.entityType}
-        </Typography>
+        <Chip
+          label={row.entityType}
+          size="small"
+          sx={{
+            fontWeight: 600,
+            fontSize: '0.72rem',
+            borderRadius: '6px',
+            bgcolor: (theme) =>
+              theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.05)',
+            color: 'text.primary',
+            border: 'none',
+          }}
+        />
       ),
     },
     {
       id: 'details',
-      label: 'Details',
-      render: (row) => row.details ?? '—',
+      label: 'Event Details',
+      render: (row) => (
+        <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 420 }}>
+          {row.details || 'None'}
+        </Typography>
+      ),
     },
     {
       id: 'performedBy',
-      label: 'Performed by',
+      label: 'Operator',
       render: (row) => (
-        <Typography variant="body2" sx={{ whiteSpace: 'nowrap' }}>
-          {row.performedBy}
-        </Typography>
+        <Stack direction="row" spacing={0.75} alignItems="center">
+          <PersonOutlineRoundedIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+          <Typography variant="body2" color="text.primary" sx={{ whiteSpace: 'nowrap' }}>
+            {row.performedBy}
+          </Typography>
+        </Stack>
       ),
     },
   ]
 
   return (
-    <Box>
-      <Toolbar disableGutters>
-        <Typography variant="h5" fontWeight={600}>
-          Activity log
+    <Box sx={{ maxWidth: 1400, mx: 'auto', p: { xs: 2, sm: 3 } }}>
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h5" fontWeight={700} sx={{ letterSpacing: '-0.02em', mb: 0.25 }}>
+          Activity & Audit Logs
         </Typography>
-      </Toolbar>
+        <Typography variant="body2" color="text.secondary">
+          Chronological record of stock operations, catalog changes, and administrative actions
+        </Typography>
+      </Box>
 
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ my: 2 }} alignItems="center">
+      <Box
+        sx={{
+          p: 2,
+          mb: 2.5,
+          borderRadius: '14px',
+          bgcolor: 'background.paper',
+          border: '1px solid',
+          borderColor: (theme) =>
+            theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.07)' : 'rgba(0, 0, 0, 0.06)',
+          boxShadow: (theme) =>
+            theme.palette.mode === 'dark' ? '0 1px 3px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.03)',
+        }}
+      >
         <TextField
-          label="Search"
-          placeholder="Search by action, entity, details or user"
+          placeholder="Filter audit events by action, entity, user, or details..."
           size="small"
-          sx={{ minWidth: 300 }}
           value={search}
           onChange={(e) => {
             setSearch(e.target.value)
             setPage(0)
           }}
+          sx={{
+            maxWidth: 440,
+            width: '100%',
+            '& .MuiOutlinedInput-root': {
+              borderRadius: '10px',
+            },
+          }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchRoundedIcon sx={{ fontSize: 19, color: 'text.secondary' }} />
+              </InputAdornment>
+            ),
+            endAdornment: search ? (
+              <InputAdornment position="end">
+                <IconButton size="small" onClick={() => setSearch('')}>
+                  <ClearRoundedIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </InputAdornment>
+            ) : null,
+          }}
         />
-      </Stack>
+      </Box>
 
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
+        <Alert severity="error" sx={{ mb: 2.5, borderRadius: '12px' }}>
           {error}
         </Alert>
       )}

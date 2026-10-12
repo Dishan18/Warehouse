@@ -133,7 +133,18 @@ export default function NotificationBell() {
         anchorEl={anchorEl}
         open={Boolean(anchorEl)}
         onClose={handleClose}
-        slotProps={{ paper: { sx: { width: 380, maxHeight: 480, mt: 1 } } }}
+        slotProps={{
+          paper: {
+            sx: {
+              width: 380,
+              maxHeight: 520,
+              mt: 1.5,
+              borderRadius: '20px',
+              boxShadow: '0 16px 36px rgba(0, 0, 0, 0.12)',
+              border: (theme) => `1px solid ${theme.palette.mode === 'light' ? 'rgba(0, 0, 0, 0.06)' : 'rgba(255, 255, 255, 0.08)'}`,
+            },
+          },
+        }}
       >
         <Box sx={{ px: 2, py: 1.5 }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center">
@@ -216,7 +227,7 @@ export default function NotificationBell() {
                   }
                   secondary={
                     <Typography variant="caption" color="text.secondary" noWrap>
-                      {notification.senderName ? `From ${notification.senderName}` : 'System'} —{' '}
+                      {notification.senderName ? `From ${notification.senderName}` : 'System'} :{' '}
                       {notification.message}
                     </Typography>
                   }
@@ -228,12 +239,14 @@ export default function NotificationBell() {
         <Divider />
         <Box sx={{ px: 2, py: 1 }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center">
-            <Typography variant="subtitle2">Low stock alerts</Typography>
+            <Typography variant="subtitle2" fontWeight={600}>
+              Low stock alerts
+            </Typography>
             {alerts.length > 0 && <Chip label={alerts.length} size="small" color="warning" />}
           </Stack>
         </Box>
         {alerts.length === 0 ? (
-          <Box sx={{ px: 2, py: 1.5, textAlign: 'center' }}>
+          <Box sx={{ px: 2, py: 2, textAlign: 'center' }}>
             <Typography variant="body2" color="text.secondary">
               No low stock alerts right now
             </Typography>
@@ -244,12 +257,12 @@ export default function NotificationBell() {
               <ListItemButton
                 key={alert.productId}
                 onClick={openProduct}
-                sx={{ alignItems: 'flex-start', px: 2, py: 1 }}
+                sx={{ alignItems: 'flex-start', px: 2, py: 1, borderRadius: '8px', mx: 1, my: 0.25 }}
               >
                 <ListItemText
                   primary={
                     <Stack direction="row" justifyContent="space-between" gap={1}>
-                      <Typography variant="body2" fontWeight={500} noWrap>
+                      <Typography variant="body2" fontWeight={600} noWrap>
                         {alert.productName}
                       </Typography>
                       <Chip
@@ -261,7 +274,7 @@ export default function NotificationBell() {
                   }
                   secondary={
                     <Typography variant="caption" color="text.secondary">
-                      {alert.sku} — {alert.quantity} left
+                      {alert.sku} : {alert.quantity} left
                       {alert.quantity <= alert.minStock ? ` (min ${alert.minStock})` : ''}
                     </Typography>
                   }

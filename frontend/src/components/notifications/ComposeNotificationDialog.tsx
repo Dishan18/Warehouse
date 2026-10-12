@@ -12,7 +12,9 @@ import {
   DialogTitle,
   Stack,
   TextField,
+  Typography,
 } from '@mui/material'
+import SendRoundedIcon from '@mui/icons-material/SendRounded'
 import { userApi } from '../../api/userApi'
 import { useAuth } from '../../context/AuthContext'
 import type { SendNotificationRequest, UserOption } from '../../types'
@@ -90,12 +92,41 @@ export default function ComposeNotificationDialog({
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>New notification</DialogTitle>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="sm"
+      fullWidth
+      PaperProps={{
+        sx: {
+          borderRadius: '18px',
+          border: '1px solid',
+          borderColor: (theme) =>
+            theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.08)',
+          boxShadow: (theme) =>
+            theme.palette.mode === 'dark'
+              ? '0 24px 48px -12px rgba(0, 0, 0, 0.6)'
+              : '0 20px 40px -12px rgba(0, 0, 0, 0.12)',
+        },
+      }}
+    >
+      <DialogTitle sx={{ pb: 1, pt: 2.5, px: 3 }}>
+        <Typography variant="h6" fontWeight={700} sx={{ letterSpacing: '-0.01em' }}>
+          Compose Alert
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Dispatch an instant push message to an active warehouse operator
+        </Typography>
+      </DialogTitle>
+
       <form onSubmit={handleSubmit(submit)} noValidate>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            {error && <Alert severity="error">{error}</Alert>}
+        <DialogContent sx={{ px: 3, py: 2 }}>
+          <Stack spacing={2.5}>
+            {error && (
+              <Alert severity="error" sx={{ borderRadius: '10px' }}>
+                {error}
+              </Alert>
+            )}
             <Controller
               name="recipient"
               control={control}
@@ -114,37 +145,66 @@ export default function ComposeNotificationDialog({
                     <TextField
                       {...params}
                       label="Recipient"
+                      placeholder="Select operator..."
                       error={Boolean(errors.recipient)}
                       helperText={errors.recipient?.message}
+                      InputProps={{
+                        ...params.InputProps,
+                        sx: { borderRadius: '10px' },
+                      }}
                     />
                   )}
                 />
               )}
             />
             <TextField
-              label="Title"
+              label="Notification Title"
+              placeholder="e.g. Critical stock reconciliation notice"
               fullWidth
               {...control.register('title')}
               error={Boolean(errors.title)}
               helperText={errors.title?.message}
+              InputProps={{ sx: { borderRadius: '10px' } }}
             />
             <TextField
-              label="Message"
+              label="Message Body"
+              placeholder="Write concise instructions or delivery details..."
               fullWidth
               multiline
               minRows={3}
               {...control.register('message')}
               error={Boolean(errors.message)}
               helperText={errors.message?.message}
+              InputProps={{ sx: { borderRadius: '10px' } }}
             />
           </Stack>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={onClose} color="inherit">
+        <DialogActions sx={{ px: 3, pb: 2.5, pt: 1, gap: 1 }}>
+          <Button
+            onClick={onClose}
+            sx={{
+              borderRadius: '10px',
+              textTransform: 'none',
+              fontWeight: 600,
+              color: 'text.secondary',
+            }}
+          >
             Cancel
           </Button>
-          <Button type="submit" variant="contained" disabled={isSubmitting}>
-            Send
+          <Button
+            type="submit"
+            variant="contained"
+            endIcon={<SendRoundedIcon sx={{ fontSize: 16 }} />}
+            disabled={isSubmitting}
+            sx={{
+              borderRadius: '10px',
+              textTransform: 'none',
+              fontWeight: 600,
+              boxShadow: 'none',
+              px: 3,
+            }}
+          >
+            Send Notification
           </Button>
         </DialogActions>
       </form>

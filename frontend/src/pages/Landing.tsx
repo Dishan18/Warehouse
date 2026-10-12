@@ -50,6 +50,7 @@ import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined'
 import LoginOutlinedIcon from '@mui/icons-material/LoginOutlined'
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded'
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded'
+import StarRoundedIcon from '@mui/icons-material/StarRounded'
 import { useColorMode } from '../context/ColorModeContext'
 
 const NAV_LINKS = [
@@ -87,7 +88,7 @@ const FEATURES = [
     icon: <NotificationsActiveOutlinedIcon />,
     title: 'Smart stock alerts',
     description:
-      'Set minimum thresholds per product and get notified before you run dry — not after.',
+      'Set minimum thresholds per product and get notified before you run dry: not after.',
   },
   {
     icon: <SwapVertOutlinedIcon />,
@@ -99,7 +100,7 @@ const FEATURES = [
     icon: <InsightsOutlinedIcon />,
     title: 'Actionable analytics',
     description:
-      'Spot trends with clean charts on stock levels, turnover and demand — updated in real time.',
+      'Spot trends with clean charts on stock levels, turnover and demand, updated in real time.',
   },
   {
     icon: <LocalShippingOutlinedIcon />,
@@ -111,7 +112,7 @@ const FEATURES = [
     icon: <AdminPanelSettingsOutlinedIcon />,
     title: 'Role-based access',
     description:
-      'Give admins, managers and staff exactly the access they need — nothing more.',
+      'Give admins, managers and staff exactly the access they need: nothing more.',
   },
 ]
 
@@ -751,9 +752,9 @@ function Hero() {
                 <Avatar sx={{ bgcolor: '#e11d48' }}>+</Avatar>
               </AvatarGroup>
               <Box>
-                <Stack direction="row" alignItems="center" spacing={0.5}>
+                <Stack direction="row" alignItems="center" spacing={0.25}>
                   {[...Array(5)].map((_, i) => (
-                    <Box key={i} sx={{ color: 'warning.main', fontSize: 16, lineHeight: 1 }}>★</Box>
+                    <StarRoundedIcon key={i} sx={{ color: 'warning.main', fontSize: 18 }} />
                   ))}
                 </Stack>
                 <Typography variant="caption" color="text.secondary">
@@ -999,7 +1000,7 @@ function WhyUs() {
                 {
                   icon: <TrackChangesOutlinedIcon />,
                   title: 'Data you can act on',
-                  description: 'Every metric is one glance away — no exports, no waiting for monthly reports.',
+                  description: 'Every metric is one glance away: no exports, no waiting for monthly reports.',
                 },
                 {
                   icon: <VerifiedOutlinedIcon />,
@@ -1055,10 +1056,14 @@ function WhyUs() {
                     : `linear-gradient(160deg, ${alpha(t.palette.primary.main, 0.12)}, ${t.palette.background.paper})`,
               }}
             >
-              <Box sx={{ color: 'warning.main', fontSize: 32, mb: 2 }}>★★★★★</Box>
+              <Stack direction="row" spacing={0.5} sx={{ mb: 2 }}>
+                {[...Array(5)].map((_, i) => (
+                  <StarRoundedIcon key={i} sx={{ color: 'warning.main', fontSize: 26 }} />
+                ))}
+              </Stack>
               <Typography component="p" variant="h6" fontWeight={600} sx={{ lineHeight: 1.6, mb: 3 }}>
                 "We cut our stockouts by 40% in the first quarter. The low-stock alerts alone
-                paid for the switch — now reordering happens before a problem exists, not after."
+                paid for the switch: now reordering happens before a problem exists, not after."
               </Typography>
               <Stack direction="row" alignItems="center" spacing={2}>
                 <Avatar sx={{ width: 44, height: 44, bgcolor: 'primary.main', fontWeight: 700 }}>
@@ -1132,7 +1137,7 @@ function CtaBand() {
             </Typography>
             <Typography variant="body1" sx={{ opacity: 0.9, maxWidth: 560, mx: 'auto', mb: 4 }}>
               Join hundreds of teams keeping their shelves stocked, their data accurate and
-              their operations moving — all from one dashboard.
+              their operations moving: all from one dashboard.
             </Typography>
             <Button
               component={RouterLink}
