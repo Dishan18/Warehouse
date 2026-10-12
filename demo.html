@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SmartWarehouse: Frontend, Architecture & Workflow Guide</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --surface-subtle: #f1f5f9;
+      --border: #e2e8f0;
+      --border-focus: #94a3b8;
+      --text-main: #0f172a;
+      --text-muted: #475569;
+      --text-subtle: #64748b;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --primary-subtle: #eff6ff;
+      --primary-border: #bfdbfe;
+      --success: #059669;
+      --success-subtle: #ecfdf5;
+      --warning: #d97706;
+      --warning-subtle: #fffbeb;
+      --danger: #dc2626;
+      --danger-subtle: #fef2f2;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+      --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background-color: var(--bg);
+      color: var(--text-main);
+      line-height: 1.6;
+      font-size: 15px;
+      padding: 0;
+      margin: 0;
+    }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+
+    .header-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 16px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-logo {
+      width: 32px;
+      height: 32px;
+      border-radius: var(--radius-sm);
+      background: var(--primary);
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 16px;
+    }
+
+    .brand-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-main);
+      letter-spacing: -0.02em;
+    }
+
+    .brand-tag {
+      font-size: 12px;
+      background: var(--primary-subtle);
+      color: var(--primary);
+      border: 1px solid var(--primary-border);
+      padding: 2px 8px;
+      border-radius: 9999px;
+      font-weight: 600;
+    }
+
+    nav.nav-links {
+      display: flex;
+      gap: 20px;
+    }
+
+    nav.nav-links a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      transition: color 0.15s ease;
+    }
+
+    nav.nav-links a:hover {
+      color: var(--primary);
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 32px 24px 80px 24px;
+    }
+
+    .hero {
+      margin-bottom: 40px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 36px 32px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .hero h1 {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 12px;
+      letter-spacing: -0.02em;
+    }
+
+    .hero p {
+      font-size: 16px;
+      color: var(--text-muted);
+      max-width: 840px;
+      margin-bottom: 24px;
+    }
+
+    .quick-status-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+      margin-top: 20px;
+    }
+
+    .quick-status-card {
+      background: var(--surface-subtle);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 16px;
+    }
+
+    .quick-status-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      font-weight: 600;
+      color: var(--text-subtle);
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+
+    .quick-status-value {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .badge-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      display: inline-block;
+    }
+
+    .section-heading {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin: 48px 0 20px 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      letter-spacing: -0.01em;
+    }
+
+    .section-heading::before {
+      content: '';
+      display: inline-block;
+      width: 4px;
+      height: 20px;
+      background: var(--primary);
+      border-radius: 2px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+
+    @media (max-width: 900px) {
+      .grid-2 {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Terminal and Code blocks */
+    .code-box {
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: var(--radius-md);
+      color: #e2e8f0;
+      margin: 14px 0;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .code-header {
+      background: #1e293b;
+      padding: 8px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      font-family: var(--font-mono);
+      color: #94a3b8;
+    }
+
+    .code-content {
+      padding: 16px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      line-height: 1.5;
+      overflow-x: auto;
+      white-space: pre;
+    }
+
+    .btn-copy {
+      background: #334155;
+      border: none;
+      color: #f1f5f9;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+
+    .btn-copy:hover {
+      background: #475569;
+    }
+
+    /* Role Based Navigation Simulator */
+    .role-switcher-container {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      margin-bottom: 32px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .role-buttons {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 16px;
+    }
+
+    .role-btn {
+      padding: 10px 20px;
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-muted);
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .role-btn:hover {
+      background: var(--surface-subtle);
+      color: var(--text-main);
+    }
+
+    .role-btn.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #ffffff;
+      box-shadow: 0 1px 3px rgba(37, 99, 235, 0.3);
+    }
+
+    .role-preview-grid {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      gap: 24px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+    }
+
+    @media (max-width: 800px) {
+      .role-preview-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .mock-sidebar {
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 20px 14px;
+    }
+
+    .mock-sidebar-brand {
+      font-weight: 700;
+      font-size: 15px;
+      color: var(--primary);
+      margin-bottom: 20px;
+      padding-left: 10px;
+    }
+
+    .mock-nav-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 13.5px;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+      transition: all 0.15s ease;
+    }
+
+    .mock-nav-item.accessible {
+      background: transparent;
+      color: var(--text-main);
+    }
+
+    .mock-nav-item.active-item {
+      background: var(--primary-subtle);
+      color: var(--primary);
+      font-weight: 600;
+    }
+
+    .mock-nav-item.hidden-item {
+      background: #f8fafc;
+      color: #94a3b8;
+      text-decoration: line-through;
+      opacity: 0.6;
+    }
+
+    .badge-pill {
+      font-size: 10.5px;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 9999px;
+    }
+
+    .badge-admin-only {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+    }
+
+    .badge-public {
+      background: #ecfdf5;
+      color: #065f46;
+      border: 1px solid #a7f3d0;
+    }
+
+    .role-details-panel {
+      padding: 24px;
+      background: var(--surface);
+    }
+
+    .role-details-header {
+      margin-bottom: 18px;
+    }
+
+    .role-details-header h3 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 4px;
+    }
+
+    .role-details-header p {
+      font-size: 13.5px;
+      color: var(--text-muted);
+    }
+
+    .permissions-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 16px;
+      font-size: 13px;
+    }
+
+    .permissions-table th {
+      text-align: left;
+      padding: 10px 12px;
+      background: var(--surface-subtle);
+      color: var(--text-subtle);
+      font-weight: 600;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .permissions-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-main);
+    }
+
+    .perm-allowed {
+      color: var(--success);
+      font-weight: 600;
+    }
+
+    .perm-denied {
+      color: var(--danger);
+      font-weight: 600;
+    }
+
+    /* Workflow Stepper */
+    .stepper {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .step-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 20px;
+      box-shadow: var(--shadow-sm);
+      transition: border-color 0.15s ease;
+    }
+
+    .step-card:hover {
+      border-color: var(--border-focus);
+    }
+
+    .step-header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+
+    .step-number {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--primary-subtle);
+      color: var(--primary);
+      border: 1px solid var(--primary-border);
+      font-weight: 700;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .step-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .step-desc {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+      line-height: 1.5;
+    }
+
+    .key-badge {
+      display: inline-block;
+      font-size: 11px;
+      font-family: var(--font-mono);
+      background: var(--surface-subtle);
+      border: 1px solid var(--border);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: var(--text-main);
+    }
+
+    .alert-box {
+      border-radius: var(--radius-sm);
+      padding: 12px 16px;
+      margin: 12px 0;
+      font-size: 13.5px;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .alert-info {
+      background: var(--primary-subtle);
+      border: 1px solid var(--primary-border);
+      color: #1e40af;
+    }
+
+    .alert-success {
+      background: var(--success-subtle);
+      border: 1px solid #a7f3d0;
+      color: #065f46;
+    }
+
+    .alert-warning {
+      background: var(--warning-subtle);
+      border: 1px solid #fde68a;
+      color: #92400e;
+    }
+
+    /* Tab Switcher */
+    .tab-bar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+    }
+
+    .tab-btn {
+      padding: 6px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-radius: var(--radius-sm);
+    }
+
+    .tab-btn.active {
+      background: var(--surface-subtle);
+      color: var(--text-main);
+      font-weight: 600;
+    }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      padding: 28px 24px;
+      text-align: center;
+      font-size: 13px;
+      color: var(--text-subtle);
+      margin-top: 60px;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="header-inner">
+      <div class="brand">
+        <div class="brand-logo">W</div>
+        <div>
+          <span class="brand-title">SmartWarehouse</span>
+          <span class="brand-tag">v0.0.1</span>
+        </div>
+      </div>
+      <nav class="nav-links">
+        <a href="#quickstart">Quick Start</a>
+        <a href="#rbac">Role Access</a>
+        <a href="#workflows">Core Workflows</a>
+        <a href="#websocket">WebSocket</a>
+        <a href="#settings">Settings</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="container">
+
+    <!-- HERO SECTION -->
+    <div class="hero">
+      <h1>Frontend & Architecture Execution Playbook</h1>
+      <p>
+        A comprehensive reference guide for running, navigating, and testing SmartWarehouse.
+        Covers Role-Based Access Control (RBAC), concurrency-safe stock idempotency, real-time WebSocket messaging, and complete frontend workflows.
+      </p>
+
+      <div class="quick-status-grid">
+        <div class="quick-status-card">
+          <div class="quick-status-title">Backend Status</div>
+          <div class="quick-status-value">
+            <span class="badge-dot"></span> Port 8080 (Active)
+          </div>
+        </div>
+        <div class="quick-status-card">
+          <div class="quick-status-title">Frontend Status</div>
+          <div class="quick-status-value">
+            <span class="badge-dot"></span> Port 3000 (React Vite)
+          </div>
+        </div>
+        <div class="quick-status-card">
+          <div class="quick-status-title">Database</div>
+          <div class="quick-status-value">Supabase PostgreSQL</div>
+        </div>
+        <div class="quick-status-card">
+          <div class="quick-status-title">Security Model</div>
+          <div class="quick-status-value">JWT HMAC-SHA384 + RBAC</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION 1: RUNNING BACKEND AND FRONTEND -->
+    <div id="quickstart">
+      <h2 class="section-heading">1. How to Run Backend & Frontend</h2>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3 style="font-size: 16px; margin-bottom: 10px;">Step A: Start Spring Boot Backend</h3>
+          <p style="font-size: 13.5px; color: var(--text-muted); margin-bottom: 12px;">
+            Set your administrator password, JWT 256-bit secret, and Supabase database password in PowerShell:
+          </p>
+          <div class="code-box">
+            <div class="code-header">
+              <span>PowerShell</span>
+              <button class="btn-copy" onclick="copySnippet(this)">Copy</button>
+            </div>
+            <div class="code-content">$env:ADMIN_PASSWORD = "Admin@123"
+$env:JWT_SECRET = "404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970"
+$env:DB_PASSWORD = "your_supabase_database_password"
+
+.\mvnw.cmd spring-boot:run</div>
+          </div>
+          <div class="alert-box alert-success">
+            <div>
+              <strong>Console Confirmation:</strong>
+              <div style="font-family: var(--font-mono); font-size: 12px; margin-top: 4px;">
+                Started SmartWarehouseApplication in ~15s | Tomcat on port 8080
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 style="font-size: 16px; margin-bottom: 10px;">Step B: Start React Frontend</h3>
+          <p style="font-size: 13.5px; color: var(--text-muted); margin-bottom: 12px;">
+            Open a second terminal window, navigate into the frontend folder, and launch Vite:
+          </p>
+          <div class="code-box">
+            <div class="code-header">
+              <span>PowerShell</span>
+              <button class="btn-copy" onclick="copySnippet(this)">Copy</button>
+            </div>
+            <div class="code-content">cd d:\Warehouse\frontend
+npm run dev</div>
+          </div>
+          <div class="alert-box alert-info">
+            <div>
+              <strong>Browser Access:</strong>
+              <div style="margin-top: 4px;">
+                URL: <strong>http://localhost:3000</strong><br>
+                Vite automatically proxies <code>/api</code> and <code>/ws</code> to <code>http://localhost:8080</code>.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION 2: ROLE-BASED ACCESS CONTROL (RBAC) INTERACTIVE NAVIGATOR -->
+    <div id="rbac">
+      <h2 class="section-heading">2. Role-Based Access Control (RBAC) Navigation Matrix</h2>
+
+      <div class="role-switcher-container">
+        <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 16px;">
+          Select a role below to inspect how the frontend sidebar adapts and which permissions are enforced by Spring Security:
+        </p>
+
+        <div class="role-buttons">
+          <button class="role-btn active" id="btn-admin" onclick="switchRole('ADMIN')">
+            <strong>ADMIN</strong> (System Administrator)
+          </button>
+          <button class="role-btn" id="btn-manager" onclick="switchRole('MANAGER')">
+            <strong>MANAGER</strong> (Warehouse Operations Lead)
+          </button>
+          <button class="role-btn" id="btn-employee" onclick="switchRole('EMPLOYEE')">
+            <strong>EMPLOYEE</strong> (Floor Staff / Picker)
+          </button>
+        </div>
+
+        <div class="role-preview-grid">
+          <!-- Mock Sidebar -->
+          <div class="mock-sidebar">
+            <div class="mock-sidebar-brand">SmartWarehouse</div>
+            
+            <div class="mock-nav-item active-item" id="nav-dashboard">
+              <span>Dashboard</span>
+            </div>
+            <div class="mock-nav-item accessible" id="nav-products">
+              <span>Products</span>
+            </div>
+            <div class="mock-nav-item accessible" id="nav-categories">
+              <span>Categories</span>
+            </div>
+            <div class="mock-nav-item accessible" id="nav-suppliers">
+              <span>Suppliers</span>
+            </div>
+            <div class="mock-nav-item accessible" id="nav-inventory">
+              <span>Inventory</span>
+            </div>
+            <div class="mock-nav-item accessible" id="nav-movements">
+              <span>Movements</span>
+            </div>
+            <div class="mock-nav-item accessible" id="nav-reports">
+              <span>Reports</span>
+            </div>
+            <div class="mock-nav-item accessible" id="nav-users">
+              <span>Users</span>
+              <span class="badge-pill badge-admin-only">Admin</span>
+            </div>
+            <div class="mock-nav-item accessible" id="nav-activity">
+              <span>Activity</span>
+              <span class="badge-pill badge-admin-only">Admin</span>
+            </div>
+            <div class="mock-nav-item accessible" id="nav-settings">
+              <span>Settings</span>
+            </div>
+          </div>
+
+          <!-- Role Details Panel -->
+          <div class="role-details-panel">
+            <div class="role-details-header">
+              <h3 id="role-title">ADMIN Role Profile</h3>
+              <p id="role-desc">Full unrestricted administrative access across the entire warehouse system and infrastructure.</p>
+            </div>
+
+            <table class="permissions-table">
+              <thead>
+                <tr>
+                  <th>Feature / Area</th>
+                  <th>Route / Endpoint</th>
+                  <th>Access Permission</th>
+                  <th>Enforcement Note</th>
+                </tr>
+              </thead>
+              <tbody id="permissions-tbody">
+                <!-- Dynamically populated by switchRole() -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION 3: CORE END-TO-END WORKFLOWS -->
+    <div id="workflows">
+      <h2 class="section-heading">3. End-to-End Workflow & Core Functionalities</h2>
+
+      <div class="stepper">
+
+        <!-- Workflow Step 1 -->
+        <div class="step-card">
+          <div class="step-header">
+            <div class="step-number">1</div>
+            <div class="step-title">Authentication & Identity Token Issuance</div>
+          </div>
+          <div class="step-desc">
+            The client sends credentials to the stateless authentication gateway. Passwords are encrypted with BCrypt (strength 10), and a signed JWT containing authority claims is issued.
+          </div>
+          <div class="code-box">
+            <div class="code-header">
+              <span>POST /api/auth/login</span>
+            </div>
+            <div class="code-content">// Request Payload:
+{
+  "email": "admin@warehouse.com",
+  "password": "Admin@123"
+}
+
+// 200 OK Response:
+{
+  "accessToken": "eyJhbGciOiJIUzM4NCJ9.eyJzdWIiOiJhZG1pbkB3YXJlaG91c2UuY29tIiwicm9sZXMiOlsiQURNSU4iXX0...",
+  "tokenType": "Bearer",
+  "roles": ["ADMIN"]
+}</div>
+          </div>
+        </div>
+
+        <!-- Workflow Step 2 -->
+        <div class="step-card">
+          <div class="step-header">
+            <div class="step-number">2</div>
+            <div class="step-title">Catalog Structuring: Categories & Suppliers</div>
+          </div>
+          <div class="step-desc">
+            Before products can be registered, foreign key taxonomies are created. The database enforces unique constraints on category names to avoid duplicates.
+          </div>
+          <div class="code-box">
+            <div class="code-header">
+              <span>POST /api/categories & POST /api/suppliers</span>
+            </div>
+            <div class="code-content">// Create Category:
+POST /api/categories
+{ "name": "Sensors & Boards", "description": "IoT Components", "active": true }
+// Returns: { "id": "5dfa43f0-fd8e-48f4-841c-68ddbe563b6c", "name": "Sensors & Boards" }
+
+// Create Supplier:
+POST /api/suppliers
+{ "name": "Apex Logistics", "email": "apex@supplies.com", "phone": "+1234567890", "active": true }
+// Returns: { "id": "8c5de530-bfb8-4856-b130-48e41f93614a", "name": "Apex Logistics" }</div>
+          </div>
+        </div>
+
+        <!-- Workflow Step 3 -->
+        <div class="step-card">
+          <div class="step-header">
+            <div class="step-number">3</div>
+            <div class="step-title">Product Inventory Registration & Status Calculation</div>
+          </div>
+          <div class="step-desc">
+            Products bind to a Category and Supplier. Initial inventory count is evaluated dynamically: if <code>quantity > minStock</code>, status is initialized as <code>IN_STOCK</code>.
+          </div>
+          <div class="code-box">
+            <div class="code-header">
+              <span>POST /api/products</span>
+            </div>
+            <div class="code-content">{
+  "sku": "MCU-ESP32-901",
+  "name": "ESP32 Dev Board",
+  "price": 45.00,
+  "quantity": 10,
+  "minStock": 3,
+  "categoryId": "5dfa43f0-fd8e-48f4-841c-68ddbe563b6c",
+  "supplierId": "8c5de530-bfb8-4856-b130-48e41f93614a",
+  "active": true
+}
+
+// 201 Created Response:
+{
+  "id": "220176f6-b56b-47e8-9a44-bda962bd128a",
+  "sku": "MCU-ESP32-901",
+  "name": "ESP32 Dev Board",
+  "quantity": 10,
+  "minStock": 3,
+  "status": "IN_STOCK"
+}</div>
+          </div>
+        </div>
+
+        <!-- Workflow Step 4 -->
+        <div class="step-card">
+          <div class="step-header">
+            <div class="step-number">4</div>
+            <div class="step-title">Concurrency-Safe Idempotent Outbound Stock Movement</div>
+          </div>
+          <div class="step-desc">
+            Outbound stock deductions prevent overselling and double deductions through an integrated two-tier defense:
+            <br>
+            1. <strong>Pessimistic Row Lock</strong>: Acquires an exclusive database lock (<code>SELECT ... FOR UPDATE</code>) on the product row.<br>
+            2. <strong>Scoped Idempotency Engine</strong>: Stores <code>(user_id, http_method, request_uri, key)</code> with SHA-256 payload hash in <code>idempotency_records</code>.
+          </div>
+          <div class="code-box">
+            <div class="code-header">
+              <span>POST /api/movements/outbound (Headers: X-Idempotency-Key: demo-key-101)</span>
+            </div>
+            <div class="code-content">// First Execution (Fresh Key):
+POST /api/movements/outbound
+Headers: [ "X-Idempotency-Key": "demo-key-101" ]
+Body: { "productId": "220176f6-...", "quantity": 4, "reason": "Sales Order #1" }
+
+Response (200 OK):
+{
+  "beforeQuantity": 10,
+  "afterQuantity": 6,
+  "type": "OUTBOUND",
+  "performedBy": "admin@warehouse.com"
+}
+
+// Replay with Same Key (Network Timeout Simulation):
+Headers: [ "X-Idempotency-Key": "demo-key-101" ]
+Body: { "productId": "220176f6-...", "quantity": 4, "reason": "Sales Order #1" }
+
+Response:
+- Returns cached response immediately (afterQuantity: 6).
+- Real Database Quantity remains 6 (DOUBLE DEDUCTION PREVENTED).
+
+// Tampered Key Reuse (Different Payload):
+Headers: [ "X-Idempotency-Key": "demo-key-101" ]
+Body: { "productId": "220176f6-...", "quantity": 2, "reason": "Tampered" }
+
+Response (422 Unprocessable Entity):
+"Idempotency key reused with different request payload"</div>
+          </div>
+        </div>
+
+        <!-- Workflow Step 5 -->
+        <div class="step-card" id="websocket">
+          <div class="step-header">
+            <div class="step-number">5</div>
+            <div class="step-title">Real-Time WebSocket Stock Alert Broadcast</div>
+          </div>
+          <div class="step-desc">
+            When inventory drops below the alert threshold (e.g., deducting 4 more units: 6 -> 2, below minStock of 3), the backend updates product status to <code>LOW_STOCK</code> and asynchronously broadcasts a STOMP frame over WebSocket.
+          </div>
+          <div class="code-box">
+            <div class="code-header">
+              <span>STOMP Topic: /topic/stock-alerts</span>
+            </div>
+            <div class="code-content">// Client WebSocket Connection:
+ws://localhost:3000/ws (proxied to ws://localhost:8080/ws)
+Destination: /topic/stock-alerts
+
+// Received Alert Frame:
+{
+  "productId": "220176f6-b56b-47e8-9a44-bda962bd128a",
+  "productName": "ESP32 Dev Board",
+  "sku": "MCU-ESP32-901",
+  "quantity": 2,
+  "minStock": 3,
+  "type": "LOW_STOCK",
+  "createdAt": "2026-10-12T21:40:00"
+}</div>
+          </div>
+          <div class="alert-box alert-warning">
+            <div>
+              <strong>Frontend Response:</strong>
+              The top navigation <strong>Bell Icon</strong> badge increments to show unread alerts, and the item displays in the "Low stock alerts" dropdown drawer.
+            </div>
+          </div>
+        </div>
+
+        <!-- Workflow Step 6 -->
+        <div class="step-card" id="settings">
+          <div class="step-header">
+            <div class="step-number">6</div>
+            <div class="step-title">Global Settings & Currency Customization (INR / USD)</div>
+          </div>
+          <div class="step-desc">
+            Under <strong>Settings</strong> (<code>/settings</code>), administrators can configure the Warehouse Name, Low Stock Threshold, and global Currency (including <strong>INR</strong>, <strong>USD</strong>, <strong>EUR</strong>, <strong>GBP</strong>).
+          </div>
+          <div class="code-box">
+            <div class="code-header">
+              <span>PUT /api/settings</span>
+            </div>
+            <div class="code-content">{
+  "warehouseName": "SmartWarehouse Central",
+  "currency": "INR",
+  "lowStockThreshold": 10,
+  "notificationsEnabled": true
+}
+
+// Effect:
+- Products table renders prices as: ₹45.00
+- Reports page renders total inventory value as: ₹49,189.94
+- Audit log records mutation in table audit_logs.</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- SECTION 4: INTERACTIVE PLAYBOOK SCRIPT -->
+    <div>
+      <h2 class="section-heading">4. One-Click Verification Script (PowerShell)</h2>
+      <div class="card">
+        <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 12px;">
+          Run this self-healing script in PowerShell to verify every backend and database subsystem sequentially:
+        </p>
+        <div class="code-box">
+          <div class="code-header">
+            <span>PowerShell Full Verification</span>
+            <button class="btn-copy" onclick="copySnippet(this)">Copy</button>
+          </div>
+          <div class="code-content"># 1. Login
+$login = Invoke-RestMethod -Uri "http://localhost:8080/api/auth/login" -Method Post -ContentType "application/json" -Body '{"email":"admin@warehouse.com","password":"Admin@123"}'
+$TOKEN = $login.accessToken
+Write-Host "1. Authentication: SUCCESS"
+
+# 2. Category: Reuse existing or create unique
+$cats = Invoke-RestMethod -Uri "http://localhost:8080/api/categories" -Method Get -Headers @{ Authorization = "Bearer $TOKEN" }
+$CAT_ID = if ($cats.content.Count -gt 0) { $cats.content[0].id } else {
+  (Invoke-RestMethod -Uri "http://localhost:8080/api/categories" -Method Post -ContentType "application/json" -Headers @{ Authorization = "Bearer $TOKEN" } -Body '{"name":"Tools","description":"Tools","active":true}').id
+}
+Write-Host "2. Category ID: $CAT_ID"
+
+# 3. Supplier: Reuse existing or create unique
+$sups = Invoke-RestMethod -Uri "http://localhost:8080/api/suppliers" -Method Get -Headers @{ Authorization = "Bearer $TOKEN" }
+$SUP_ID = if ($sups.content.Count -gt 0) { $sups.content[0].id } else {
+  (Invoke-RestMethod -Uri "http://localhost:8080/api/suppliers" -Method Post -ContentType "application/json" -Headers @{ Authorization = "Bearer $TOKEN" } -Body '{"name":"Apex Logistics","email":"apex@test.com","active":true}').id
+}
+Write-Host "3. Supplier ID: $SUP_ID"
+
+# 4. Product: Create fresh item
+$rand = Get-Random -Minimum 1000 -Maximum 9999
+$prod = Invoke-RestMethod -Uri "http://localhost:8080/api/products" -Method Post -ContentType "application/json" -Headers @{ Authorization = "Bearer $TOKEN" } -Body (@{ sku="SKU-$rand"; name="Product $rand"; price=25.00; quantity=10; minStock=3; categoryId=$CAT_ID; supplierId=$SUP_ID; active=$true } | ConvertTo-Json)
+Write-Host "4. Created Product: $($prod.name) (Stock: $($prod.quantity), Status: $($prod.status))"
+
+# 5. Outbound Movement: Deduct 4 (10 -> 6)
+$key = "key-$rand"
+$move = Invoke-RestMethod -Uri "http://localhost:8080/api/movements/outbound" -Method Post -ContentType "application/json" -Headers @{ Authorization = "Bearer $TOKEN"; "X-Idempotency-Key" = $key } -Body (@{ productId=$prod.id; quantity=4; reason="Test" } | ConvertTo-Json)
+Write-Host "5. Deduction: $($move.beforeQuantity) -> $($move.afterQuantity)"
+
+# 6. Idempotent Replay (Verify double deduction prevented)
+$replay = Invoke-RestMethod -Uri "http://localhost:8080/api/movements/outbound" -Method Post -ContentType "application/json" -Headers @{ Authorization = "Bearer $TOKEN"; "X-Idempotency-Key" = $key } -Body (@{ productId=$prod.id; quantity=4; reason="Test" } | ConvertTo-Json)
+$dbProd = Invoke-RestMethod -Uri "http://localhost:8080/api/products/$($prod.id)" -Method Get -Headers @{ Authorization = "Bearer $TOKEN" }
+Write-Host "6. Replay Cached: $($replay.afterQuantity) | Actual DB Stock: $($dbProd.quantity) (NO DOUBLE DEDUCTION)"
+
+# 7. Low Stock Transition (6 -> 2, below minStock of 3)
+$low = Invoke-RestMethod -Uri "http://localhost:8080/api/movements/outbound" -Method Post -ContentType "application/json" -Headers @{ Authorization = "Bearer $TOKEN"; "X-Idempotency-Key" = "low-$rand" } -Body (@{ productId=$prod.id; quantity=4; reason="Deplete" } | ConvertTo-Json)
+$finalProd = Invoke-RestMethod -Uri "http://localhost:8080/api/products/$($prod.id)" -Method Get -Headers @{ Authorization = "Bearer $TOKEN" }
+Write-Host "7. Final Stock: $($finalProd.quantity), Status: $($finalProd.status) (WebSocket alert fired!)"</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <footer>
+    SmartWarehouse Concurrency, Security &amp; Workflow Guide. Built with Spring Boot 3.5, React 19, and Supabase PostgreSQL.
+  </footer>
+
+  <script>
+    const roleData = {
+      ADMIN: {
+        title: "ADMIN Role Profile",
+        desc: "Full unrestricted administrative access across the entire warehouse system and infrastructure.",
+        navs: {
+          dashboard: true,
+          products: true,
+          categories: true,
+          suppliers: true,
+          inventory: true,
+          movements: true,
+          reports: true,
+          users: true,
+          activity: true,
+          settings: true
+        },
+        permissions: [
+          { feature: "Dashboard Overview", route: "/dashboard", access: "Full Access", note: "Real-time metrics, low stock lists, charts" },
+          { feature: "Product Catalog", route: "/products/**", access: "Full Access", note: "Create, view, update, delete products" },
+          { feature: "Category Taxonomy", route: "/categories/**", access: "Full Access", note: "Manage product groupings" },
+          { feature: "Supplier Directory", route: "/suppliers/**", access: "Full Access", note: "Register vendor logistics partners" },
+          { feature: "Stock Movements", route: "/movements/**", access: "Full Access", note: "Execute in/outbound operations with locks" },
+          { feature: "Analytics & Reports", route: "/reports/**", access: "Full Access", note: "CSV and PDF report generations" },
+          { feature: "Staff Directory", route: "/users/**", access: "Full Access", note: "Create and assign roles (ADMIN only)" },
+          { feature: "Audit Ledger", route: "/audit-logs/**", access: "Full Access", note: "Inspect immutable system events (ADMIN only)" },
+          { feature: "Global Settings", route: "/settings", access: "Full Access", note: "Configure currency (INR/USD) and thresholds" }
+        ]
+      },
+      MANAGER: {
+        title: "MANAGER Role Profile",
+        desc: "Operational lead for inventory management, stock recount adjustments, purchasing, and reporting.",
+        navs: {
+          dashboard: true,
+          products: true,
+          categories: true,
+          suppliers: true,
+          inventory: true,
+          movements: true,
+          reports: true,
+          users: false,
+          activity: false,
+          settings: true
+        },
+        permissions: [
+          { feature: "Dashboard Overview", route: "/dashboard", access: "Full Access", note: "Inspect warehouse velocity & stock levels" },
+          { feature: "Product Catalog", route: "/products/**", access: "Full Access", note: "Create and update inventory items" },
+          { feature: "Category Taxonomy", route: "/categories/**", access: "Full Access", note: "Manage product categories" },
+          { feature: "Supplier Directory", route: "/suppliers/**", access: "Full Access", note: "Manage vendors and suppliers" },
+          { feature: "Stock Movements", route: "/movements/**", access: "Full Access", note: "Manage stock deductions and adjustments" },
+          { feature: "Analytics & Reports", route: "/reports/**", access: "Full Access", note: "Export CSVs and audit summaries" },
+          { feature: "Staff Directory", route: "/users/**", access: "Hidden / Denied", note: "HTTP 403 Forbidden enforced by Spring Security" },
+          { feature: "Audit Ledger", route: "/audit-logs/**", access: "Hidden / Denied", note: "HTTP 403 Forbidden enforced by Spring Security" },
+          { feature: "Global Settings", route: "/settings", access: "Full Access", note: "View operational thresholds" }
+        ]
+      },
+      EMPLOYEE: {
+        title: "EMPLOYEE Role Profile",
+        desc: "Floor staff and order pickers executing physical stock movements and inventory lookups.",
+        navs: {
+          dashboard: true,
+          products: true,
+          categories: true,
+          suppliers: true,
+          inventory: true,
+          movements: true,
+          reports: true,
+          users: false,
+          activity: false,
+          settings: true
+        },
+        permissions: [
+          { feature: "Dashboard Overview", route: "/dashboard", access: "Full Access", note: "View stock levels and recent activity" },
+          { feature: "Product Catalog", route: "/products", access: "View Only", note: "Lookup SKU balances and locations" },
+          { feature: "Category Taxonomy", route: "/categories", access: "View Only", note: "Browse item classifications" },
+          { feature: "Supplier Directory", route: "/suppliers", access: "View Only", note: "Lookup contact details" },
+          { feature: "Stock Movements", route: "/movements/**", access: "Full Access", note: "Perform inbound and outbound orders" },
+          { feature: "Analytics & Reports", route: "/reports/**", access: "View Only", note: "Inspect stock levels and movement logs" },
+          { feature: "Staff Directory", route: "/users/**", access: "Hidden / Denied", note: "HTTP 403 Forbidden (Strict RBAC)" },
+          { feature: "Audit Ledger", route: "/audit-logs/**", access: "Hidden / Denied", note: "HTTP 403 Forbidden (Strict RBAC)" },
+          { feature: "Global Settings", route: "/settings", access: "View Only", note: "Read-only access to warehouse thresholds" }
+        ]
+      }
+    };
+
+    function switchRole(roleKey) {
+      document.querySelectorAll('.role-btn').forEach(btn => btn.classList.remove('active'));
+      const activeBtn = document.getElementById('btn-' + roleKey.toLowerCase());
+      if (activeBtn) activeBtn.classList.add('active');
+
+      const data = roleData[roleKey];
+      document.getElementById('role-title').textContent = data.title;
+      document.getElementById('role-desc').textContent = data.desc;
+
+      // Update mock sidebar
+      const navKeys = ['dashboard', 'products', 'categories', 'suppliers', 'inventory', 'movements', 'reports', 'users', 'activity', 'settings'];
+      navKeys.forEach(key => {
+        const el = document.getElementById('nav-' + key);
+        if (!el) return;
+        if (data.navs[key]) {
+          el.className = 'mock-nav-item accessible' + (key === 'dashboard' ? ' active-item' : '');
+          el.style.display = 'flex';
+        } else {
+          el.className = 'mock-nav-item hidden-item';
+          el.style.display = 'none';
+        }
+      });
+
+      // Update table
+      const tbody = document.getElementById('permissions-tbody');
+      tbody.innerHTML = '';
+      data.permissions.forEach(p => {
+        const tr = document.createElement('tr');
+        const isAllowed = !p.access.includes('Denied');
+        tr.innerHTML = `
+          <td><strong>${p.feature}</strong></td>
+          <td><code style="font-family: var(--font-mono); font-size: 12px;">${p.route}</code></td>
+          <td class="${isAllowed ? 'perm-allowed' : 'perm-denied'}">${p.access}</td>
+          <td style="color: var(--text-muted); font-size: 12.5px;">${p.note}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function copySnippet(btn) {
+      const code = btn.closest('.code-box').querySelector('.code-content').textContent;
+      navigator.clipboard.writeText(code).then(() => {
+        const originalText = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = originalText; }, 2000);
+      });
+    }
+
+    // Initialize default view
+    switchRole('ADMIN');
+  </script>
+</body>
+</html>
