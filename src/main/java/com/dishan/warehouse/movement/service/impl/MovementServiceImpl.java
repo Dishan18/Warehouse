@@ -48,8 +48,9 @@ public class MovementServiceImpl implements MovementService {
     @Transactional
     public MovementResponse inbound(MovementRequest request, String username) {
 
-        Product product = findProduct(request.getProductId());
         requirePositiveQuantity(request.getQuantity());
+        // PESSIMISTIC_WRITE lock: ensures concurrent inbound updates serialize and prevent lost updates
+        Product product = findProductForUpdate(request.getProductId());
 
         int before = product.getQuantity();
         int after = before + request.getQuantity();
@@ -62,10 +63,10 @@ public class MovementServiceImpl implements MovementService {
     @Transactional
     public MovementResponse outbound(MovementRequest request, String username) {
 
+        requirePositiveQuantity(request.getQuantity());
         // PESSIMISTIC_WRITE lock: blocks concurrent transactions from reading a stale
         // quantity for this product until this transaction commits, preventing negative stock.
         Product product = findProductForUpdate(request.getProductId());
-        requirePositiveQuantity(request.getQuantity());
 
         int before = product.getQuantity();
 
@@ -140,12 +141,6 @@ public class MovementServiceImpl implements MovementService {
         ));
 
         return movementMapper.toResponse(saved);
-    }
-
-    private Product findProduct(UUID productId) {
-
-        return productRepository.findById(productId)
-                .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
     }
 
     private Product findProductForUpdate(UUID productId) {

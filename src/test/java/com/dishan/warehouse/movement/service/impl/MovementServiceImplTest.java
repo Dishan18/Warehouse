@@ -74,7 +74,7 @@ class MovementServiceImplTest {
 
     @Test
     void inbound_increasesQuantityAndRecordsBeforeAfter() {
-        when(productRepository.findById(product.getId())).thenReturn(Optional.of(product));
+        when(productRepository.findByIdForUpdate(product.getId())).thenReturn(Optional.of(product));
         when(movementRepository.save(any(StockMovement.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(movementMapper.toResponse(any(StockMovement.class))).thenReturn(MovementResponse.builder().build());
@@ -149,7 +149,6 @@ class MovementServiceImplTest {
     @Test
     void inbound_rejectsZeroQuantity() {
         request.setQuantity(0);
-        when(productRepository.findById(product.getId())).thenReturn(Optional.of(product));
 
         assertThrows(IllegalArgumentException.class, () -> movementService.inbound(request, "admin@test.com"));
     }

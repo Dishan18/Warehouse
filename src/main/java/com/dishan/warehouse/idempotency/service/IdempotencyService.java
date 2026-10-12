@@ -23,22 +23,31 @@ public class IdempotencyService {
     private final IdempotencyRepository repository;
 
     /**
-     * Checks the idempotency key in an isolated transaction.
+     * Checks the idempotency key in an isolated transaction using pessimistic write locking.
+     * Scoped to the authenticated user, HTTP method, request URI, and key.
      * Returns an existing completed record if available for replay,
      * or reserves the key as IN_FLIGHT.
      *
      * @return IdempotencyRecord if completed (replay), null if newly reserved (proceed)
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public IdempotencyRecord processOrReserve(String key, String requestHash) {
-        Optional<IdempotencyRecord> existingOpt = repository.findByIdempotencyKey(key);
+    public IdempotencyRecord processOrReserve(
+            String userId,
+            String httpMethod,
+            String requestUri,
+            String key,
+            String requestHash
+    ) {
+        // Acquire row-level pessimistic write lock on existing record to prevent race conditions during recovery
+        Optional<IdempotencyRecord> existingOpt = repository.findForUpdate(userId, httpMethod, requestUri, key);
 
         if (existingOpt.isPresent()) {
             IdempotencyRecord existing = existingOpt.get();
 
             if (existing.getStatus() == IdempotencyStatus.COMPLETED) {
                 if (!existing.getRequestHash().equals(requestHash)) {
-                    log.warn("Idempotency key '{}' reused with different request hash", key);
+                    log.warn("Idempotency key '{}' for user '{}' on {} {} reused with different request hash",
+                            key, userId, httpMethod, requestUri);
                     throw new IdempotencyConflictException("Idempotency key reused with different request payload");
                 }
                 log.info("Idempotency key '{}' matched existing completed record, replaying response", key);
@@ -46,11 +55,12 @@ public class IdempotencyService {
             }
 
             if (existing.getStatus() == IdempotencyStatus.IN_FLIGHT) {
-                // If it's expired in-flight (e.g. process crashed), allow recovery
+                // If it's expired in-flight (e.g. previous worker crashed), allow recovery under row lock
                 if (existing.getExpiresAt().isBefore(LocalDateTime.now())) {
-                    log.info("Idempotency key '{}' had expired IN_FLIGHT state, re-claiming", key);
+                    log.info("Idempotency key '{}' had expired IN_FLIGHT state, re-claiming slot under lock", key);
                     existing.setRequestHash(requestHash);
                     existing.setExpiresAt(LocalDateTime.now().plusHours(24));
+                    repository.saveAndFlush(existing);
                     return null;
                 }
                 log.warn("Idempotency key '{}' currently in progress", key);
@@ -58,11 +68,12 @@ public class IdempotencyService {
             }
 
             if (existing.getStatus() == IdempotencyStatus.FAILED) {
-                // Previous attempt failed, allow retry with same key
+                // Previous attempt failed, allow retry under row lock
+                log.info("Idempotency key '{}' had FAILED state, re-claiming slot for retry under lock", key);
                 existing.setStatus(IdempotencyStatus.IN_FLIGHT);
                 existing.setRequestHash(requestHash);
                 existing.setExpiresAt(LocalDateTime.now().plusHours(24));
-                repository.save(existing);
+                repository.saveAndFlush(existing);
                 return null;
             }
         }
@@ -70,6 +81,9 @@ public class IdempotencyService {
         // New key: reserve slot as IN_FLIGHT
         try {
             IdempotencyRecord record = IdempotencyRecord.builder()
+                    .userId(userId)
+                    .httpMethod(httpMethod)
+                    .requestUri(requestUri)
                     .idempotencyKey(key)
                     .requestHash(requestHash)
                     .status(IdempotencyStatus.IN_FLIGHT)
@@ -79,28 +93,45 @@ public class IdempotencyService {
             repository.saveAndFlush(record);
             return null;
         } catch (DataIntegrityViolationException ex) {
-            log.warn("Concurrent insert race for idempotency key '{}'", key);
+            log.warn("Concurrent insert race for idempotency key '{}' for user '{}' on {} {}",
+                    key, userId, httpMethod, requestUri);
             throw new IdempotencyInProgressException("Request with this idempotency key is currently processing");
         }
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void complete(String key, int responseStatus, String responseBody) {
-        repository.findByIdempotencyKey(key).ifPresent(record -> {
+    public void complete(String userId, String httpMethod, String requestUri, String key, int responseStatus, String responseBody) {
+        repository.findForUpdate(userId, httpMethod, requestUri, key).ifPresent(record -> {
             record.setStatus(IdempotencyStatus.COMPLETED);
             record.setResponseStatus(responseStatus);
             record.setResponseBody(responseBody);
-            repository.save(record);
+            repository.saveAndFlush(record);
             log.debug("Marked idempotency key '{}' as COMPLETED with status {}", key, responseStatus);
         });
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void fail(String key) {
-        repository.findByIdempotencyKey(key).ifPresent(record -> {
+    public void fail(String userId, String httpMethod, String requestUri, String key) {
+        repository.findForUpdate(userId, httpMethod, requestUri, key).ifPresent(record -> {
             record.setStatus(IdempotencyStatus.FAILED);
-            repository.save(record);
+            repository.saveAndFlush(record);
             log.debug("Marked idempotency key '{}' as FAILED", key);
         });
+    }
+
+    // Convenience overloads with default scope
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public IdempotencyRecord processOrReserve(String key, String requestHash) {
+        return processOrReserve("anonymous", "POST", "/api/default", key, requestHash);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void complete(String key, int responseStatus, String responseBody) {
+        complete("anonymous", "POST", "/api/default", key, responseStatus, responseBody);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void fail(String key) {
+        fail("anonymous", "POST", "/api/default", key);
     }
 }

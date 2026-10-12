@@ -97,29 +97,35 @@ sequenceDiagram
 
 ## 3. Idempotency Engine Architecture
 
-### 3.1 Idempotency State Machine
+### 3.1 Idempotency Scope and State Machine
+
+To prevent cross-user and cross-endpoint key collisions, idempotency records are strictly scoped by a composite database uniqueness constraint:
+`(user_id, http_method, request_uri, idempotency_key)`
 
 ```mermaid
 stateDiagram-v2
-    [*] --> CheckRecord : Request with X-Idempotency-Key
+    [*] --> LockCheck : Request with X-Idempotency-Key
     
-    CheckRecord --> NotFound : Key not present in DB
-    CheckRecord --> Completed : Key present with COMPLETED
-    CheckRecord --> InFlight : Key present with IN_FLIGHT
-    CheckRecord --> Failed : Key present with FAILED
+    LockCheck --> NotFound : No matching scope in DB
+    LockCheck --> Completed : Scoped record is COMPLETED
+    LockCheck --> InFlight : Scoped record is IN_FLIGHT
+    LockCheck --> Failed : Scoped record is FAILED
 
     NotFound --> InFlightInsert : Insert new record (IN_FLIGHT)
-    InFlightInsert --> Processing : Success
-    InFlightInsert --> 409Conflict : DB Unique Constraint Violation (Race)
+    InFlightInsert --> Processing : Insert succeeded
+    InFlightInsert --> 409Conflict : DB Unique Constraint Violation (Concurrent Race)
 
-    Completed --> HashCheck : Compare SHA-256 Request Hash
+    Completed --> HashCheck : Compare Request Hash (userId + method + uri + body)
     HashCheck --> Replay200 : Hashes Match -> Return Cached Response
     HashCheck --> 422Conflict : Hashes Differ -> Payload Conflict
 
-    InFlight --> 409Conflict : Another thread is currently processing
-    
-    Failed --> InFlightUpdate : Allow retry -> Reset to IN_FLIGHT
-    InFlightUpdate --> Processing
+    InFlight --> ExpiredCheck : Check if expires_at < now()
+    ExpiredCheck --> 409Conflict : Still valid in-flight -> Currently processing
+    ExpiredCheck --> ReclaimSlot : Expired in-flight -> Re-claim under row lock
+    ReclaimSlot --> Processing
+
+    Failed --> ReclaimFailed : Re-claim under row lock -> Reset to IN_FLIGHT
+    ReclaimFailed --> Processing
 
     Processing --> MarkCompleted : Downstream HTTP Status 2xx
     Processing --> MarkFailed : Downstream HTTP Status 4xx/5xx or Exception
@@ -131,21 +137,37 @@ stateDiagram-v2
     422Conflict --> [*]
 ```
 
-### 3.2 Request Caching & Servlet Stream Handling
-Under standard Java Servlet specifications, `request.getInputStream()` can only be read once. If a filter reads the input stream to compute a SHA-256 hash, Spring MVC `@RequestBody` deserialization fails with `HttpMessageNotReadableException`.
+### 3.2 Pessimistic Lock Recovery on Expired and Failed Keys
+When re-claiming an expired `IN_FLIGHT` record or retrying a `FAILED` record, concurrent requests could race if read without row locks.
+
+To eliminate this race:
+1. `IdempotencyRepository.findForUpdate(...)` queries PostgreSQL using `@Lock(LockModeType.PESSIMISTIC_WRITE)`:
+   ```sql
+   SELECT r FROM idempotency_records r 
+   WHERE r.user_id = ? AND r.http_method = ? AND r.request_uri = ? AND r.idempotency_key = ? 
+   FOR UPDATE;
+   ```
+2. The first thread acquires the exclusive row lock in PostgreSQL.
+3. If the record is expired `IN_FLIGHT` or `FAILED`, the winning thread updates the status to `IN_FLIGHT`, refreshes `expires_at` to `now() + 24h`, flushes changes, and commits.
+4. When subsequent threads acquire the row lock, they read the fresh committed state: status is now `IN_FLIGHT` with a future expiration timestamp.
+5. Subsequent threads immediately throw `IdempotencyInProgressException` (HTTP 409 Conflict), guaranteeing that exactly one request recovers and executes business logic.
+
+### 3.3 Request Caching and Servlet Stream Handling
+Under standard Java Servlet specifications, `request.getInputStream()` can only be read once. If a filter reads the input stream to compute a hash, Spring MVC `@RequestBody` deserialization fails with `HttpMessageNotReadableException`.
 
 To solve this:
 1. [`CachedBodyHttpServletRequest`](file:///d:/Warehouse/src/main/java/com/dishan/warehouse/idempotency/filter/CachedBodyHttpServletRequest.java): Reads `request.getInputStream().readAllBytes()` once into memory, caching `byte[] cachedBody`. Overrides `getInputStream()` and `getReader()` to supply fresh `ByteArrayInputStream` instances on demand.
 2. `ContentCachingResponseWrapper`: Wraps `HttpServletResponse` during downstream execution. Once the controller produces output, the wrapper captures the response byte stream, status code, and headers without prematurely writing to the network socket.
 3. [`IdempotencyFilter`](file:///d:/Warehouse/src/main/java/com/dishan/warehouse/idempotency/filter/IdempotencyFilter.java):
+   - Computes request hash scoped to `userId:httpMethod:requestUri:bodyBytes`.
    - Status 2xx: Caches payload in `idempotency_records` table, transitions to `COMPLETED`, calls `responseWrapper.copyBodyToResponse()`.
-   - Status 4xx/5xx: Calls `idempotencyService.fail(key)` to allow retry, calls `responseWrapper.copyBodyToResponse()`.
+   - Status 4xx/5xx: Calls `idempotencyService.fail(userId, httpMethod, requestUri, key)` to allow retry, calls `responseWrapper.copyBodyToResponse()`.
 
-### 3.3 Transaction Isolation with `REQUIRES_NEW`
+### 3.4 Transaction Isolation with `REQUIRES_NEW`
 In [`IdempotencyService.java`](file:///d:/Warehouse/src/main/java/com/dishan/warehouse/idempotency/service/IdempotencyService.java):
 All idempotency status mutations run inside `@Transactional(propagation = Propagation.REQUIRES_NEW)`.
 This isolates the idempotency audit record from the main application business transaction:
-- If the stock deduction business transaction rolls back due to a business exception, the `IdempotencyRecord` status update to `FAILED` is **not** rolled back, permitting subsequent client retries.
+- If the stock deduction business transaction rolls back due to a business exception, the `IdempotencyRecord` status update to `FAILED` is not rolled back, permitting subsequent client retries.
 - When `IN_FLIGHT` is saved, it commits immediately to PostgreSQL so any competing concurrent thread will instantly see the locked slot.
 
 ---

@@ -12,6 +12,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.lang.NonNull;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.util.ContentCachingResponseWrapper;
@@ -48,11 +50,19 @@ public class IdempotencyFilter extends OncePerRequestFilter {
         }
 
         key = key.trim();
+        String httpMethod = request.getMethod();
+        String requestUri = request.getRequestURI();
+
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        String userId = (auth != null && auth.isAuthenticated() && auth.getName() != null && !"anonymousUser".equalsIgnoreCase(auth.getName()))
+                ? auth.getName()
+                : "anonymous";
+
         CachedBodyHttpServletRequest cachedRequest = new CachedBodyHttpServletRequest(request);
-        String requestHash = computeSha256(cachedRequest.getCachedBody());
+        String requestHash = computeRequestHash(userId, httpMethod, requestUri, cachedRequest.getCachedBody());
 
         try {
-            IdempotencyRecord replayRecord = idempotencyService.processOrReserve(key, requestHash);
+            IdempotencyRecord replayRecord = idempotencyService.processOrReserve(userId, httpMethod, requestUri, key, requestHash);
 
             if (replayRecord != null) {
                 // Replay saved response
@@ -74,12 +84,12 @@ public class IdempotencyFilter extends OncePerRequestFilter {
                 int status = responseWrapper.getStatus();
                 if (status >= 200 && status < 300) {
                     String responseBody = new String(responseWrapper.getContentAsByteArray(), StandardCharsets.UTF_8);
-                    idempotencyService.complete(key, status, responseBody);
+                    idempotencyService.complete(userId, httpMethod, requestUri, key, status, responseBody);
                 } else {
-                    idempotencyService.fail(key);
+                    idempotencyService.fail(userId, httpMethod, requestUri, key);
                 }
             } catch (Exception ex) {
-                idempotencyService.fail(key);
+                idempotencyService.fail(userId, httpMethod, requestUri, key);
                 throw ex;
             } finally {
                 responseWrapper.copyBodyToResponse();
@@ -104,10 +114,13 @@ public class IdempotencyFilter extends OncePerRequestFilter {
         }
     }
 
-    private String computeSha256(byte[] data) {
+    private String computeRequestHash(String userId, String method, String uri, byte[] data) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(data != null ? data : new byte[0]);
+            String prefix = userId + ":" + method + ":" + uri + ":";
+            digest.update(prefix.getBytes(StandardCharsets.UTF_8));
+            digest.update(data != null ? data : new byte[0]);
+            byte[] hash = digest.digest();
             StringBuilder hex = new StringBuilder();
             for (byte b : hash) {
                 String h = Integer.toHexString(0xff & b);

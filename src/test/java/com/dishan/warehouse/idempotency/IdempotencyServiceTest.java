@@ -21,6 +21,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -32,20 +33,26 @@ class IdempotencyServiceTest {
     @InjectMocks
     private IdempotencyService service;
 
+    private final String userId = "user@warehouse.com";
+    private final String httpMethod = "POST";
+    private final String requestUri = "/api/movements/outbound";
     private final String key = "test-key-123";
     private final String hash = "abc123hash";
 
     @Test
     void processOrReserve_whenNewKey_savesInFlightAndReturnsNull() {
-        when(repository.findByIdempotencyKey(key)).thenReturn(Optional.empty());
+        when(repository.findForUpdate(userId, httpMethod, requestUri, key)).thenReturn(Optional.empty());
 
-        IdempotencyRecord result = service.processOrReserve(key, hash);
+        IdempotencyRecord result = service.processOrReserve(userId, httpMethod, requestUri, key, hash);
 
         assertNull(result);
         ArgumentCaptor<IdempotencyRecord> captor = ArgumentCaptor.forClass(IdempotencyRecord.class);
         verify(repository).saveAndFlush(captor.capture());
 
         IdempotencyRecord saved = captor.getValue();
+        assertEquals(userId, saved.getUserId());
+        assertEquals(httpMethod, saved.getHttpMethod());
+        assertEquals(requestUri, saved.getRequestUri());
         assertEquals(key, saved.getIdempotencyKey());
         assertEquals(hash, saved.getRequestHash());
         assertEquals(IdempotencyStatus.IN_FLIGHT, saved.getStatus());
@@ -55,6 +62,9 @@ class IdempotencyServiceTest {
     void processOrReserve_whenCompletedAndHashMatches_returnsRecord() {
         IdempotencyRecord completed = IdempotencyRecord.builder()
                 .id(UUID.randomUUID())
+                .userId(userId)
+                .httpMethod(httpMethod)
+                .requestUri(requestUri)
                 .idempotencyKey(key)
                 .requestHash(hash)
                 .status(IdempotencyStatus.COMPLETED)
@@ -64,9 +74,9 @@ class IdempotencyServiceTest {
                 .expiresAt(LocalDateTime.now().plusHours(24))
                 .build();
 
-        when(repository.findByIdempotencyKey(key)).thenReturn(Optional.of(completed));
+        when(repository.findForUpdate(userId, httpMethod, requestUri, key)).thenReturn(Optional.of(completed));
 
-        IdempotencyRecord result = service.processOrReserve(key, hash);
+        IdempotencyRecord result = service.processOrReserve(userId, httpMethod, requestUri, key, hash);
 
         assertNotNull(result);
         assertEquals(200, result.getResponseStatus());
@@ -77,67 +87,127 @@ class IdempotencyServiceTest {
     @Test
     void processOrReserve_whenCompletedAndHashDiffers_throwsConflict() {
         IdempotencyRecord completed = IdempotencyRecord.builder()
+                .userId(userId)
+                .httpMethod(httpMethod)
+                .requestUri(requestUri)
                 .idempotencyKey(key)
                 .requestHash("different-hash")
                 .status(IdempotencyStatus.COMPLETED)
                 .build();
 
-        when(repository.findByIdempotencyKey(key)).thenReturn(Optional.of(completed));
+        when(repository.findForUpdate(userId, httpMethod, requestUri, key)).thenReturn(Optional.of(completed));
 
-        assertThrows(IdempotencyConflictException.class, () -> service.processOrReserve(key, hash));
+        assertThrows(IdempotencyConflictException.class, () ->
+                service.processOrReserve(userId, httpMethod, requestUri, key, hash));
     }
 
     @Test
-    void processOrReserve_whenInFlight_throwsInProgressException() {
+    void processOrReserve_whenInFlightAndNotExpired_throwsInProgressException() {
         IdempotencyRecord inFlight = IdempotencyRecord.builder()
+                .userId(userId)
+                .httpMethod(httpMethod)
+                .requestUri(requestUri)
                 .idempotencyKey(key)
                 .requestHash(hash)
                 .status(IdempotencyStatus.IN_FLIGHT)
                 .expiresAt(LocalDateTime.now().plusHours(1))
                 .build();
 
-        when(repository.findByIdempotencyKey(key)).thenReturn(Optional.of(inFlight));
+        when(repository.findForUpdate(userId, httpMethod, requestUri, key)).thenReturn(Optional.of(inFlight));
 
-        assertThrows(IdempotencyInProgressException.class, () -> service.processOrReserve(key, hash));
+        assertThrows(IdempotencyInProgressException.class, () ->
+                service.processOrReserve(userId, httpMethod, requestUri, key, hash));
+    }
+
+    @Test
+    void processOrReserve_whenInFlightExpired_allowsRecoveryUnderLock() {
+        IdempotencyRecord expiredInFlight = IdempotencyRecord.builder()
+                .userId(userId)
+                .httpMethod(httpMethod)
+                .requestUri(requestUri)
+                .idempotencyKey(key)
+                .requestHash("old-hash")
+                .status(IdempotencyStatus.IN_FLIGHT)
+                .expiresAt(LocalDateTime.now().minusMinutes(5))
+                .build();
+
+        when(repository.findForUpdate(userId, httpMethod, requestUri, key)).thenReturn(Optional.of(expiredInFlight));
+
+        IdempotencyRecord result = service.processOrReserve(userId, httpMethod, requestUri, key, hash);
+
+        assertNull(result);
+        verify(repository).saveAndFlush(expiredInFlight);
+        assertEquals(hash, expiredInFlight.getRequestHash());
+        assertTrue(expiredInFlight.getExpiresAt().isAfter(LocalDateTime.now()));
+    }
+
+    @Test
+    void processOrReserve_whenFailedState_allowsRecoveryUnderLock() {
+        IdempotencyRecord failedRecord = IdempotencyRecord.builder()
+                .userId(userId)
+                .httpMethod(httpMethod)
+                .requestUri(requestUri)
+                .idempotencyKey(key)
+                .requestHash("failed-attempt-hash")
+                .status(IdempotencyStatus.FAILED)
+                .expiresAt(LocalDateTime.now().plusHours(1))
+                .build();
+
+        when(repository.findForUpdate(userId, httpMethod, requestUri, key)).thenReturn(Optional.of(failedRecord));
+
+        IdempotencyRecord result = service.processOrReserve(userId, httpMethod, requestUri, key, hash);
+
+        assertNull(result);
+        verify(repository).saveAndFlush(failedRecord);
+        assertEquals(IdempotencyStatus.IN_FLIGHT, failedRecord.getStatus());
+        assertEquals(hash, failedRecord.getRequestHash());
+        assertTrue(failedRecord.getExpiresAt().isAfter(LocalDateTime.now()));
     }
 
     @Test
     void processOrReserve_whenConcurrentInsertRace_throwsInProgressException() {
-        when(repository.findByIdempotencyKey(key)).thenReturn(Optional.empty());
+        when(repository.findForUpdate(userId, httpMethod, requestUri, key)).thenReturn(Optional.empty());
         when(repository.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("Unique constraint violation"));
 
-        assertThrows(IdempotencyInProgressException.class, () -> service.processOrReserve(key, hash));
+        assertThrows(IdempotencyInProgressException.class, () ->
+                service.processOrReserve(userId, httpMethod, requestUri, key, hash));
     }
 
     @Test
     void complete_updatesStatusAndResponseBody() {
         IdempotencyRecord record = IdempotencyRecord.builder()
+                .userId(userId)
+                .httpMethod(httpMethod)
+                .requestUri(requestUri)
                 .idempotencyKey(key)
                 .status(IdempotencyStatus.IN_FLIGHT)
                 .build();
 
-        when(repository.findByIdempotencyKey(key)).thenReturn(Optional.of(record));
+        when(repository.findForUpdate(userId, httpMethod, requestUri, key)).thenReturn(Optional.of(record));
 
-        service.complete(key, 201, "{\"id\":1}");
+        service.complete(userId, httpMethod, requestUri, key, 201, "{\"id\":1}");
 
         assertEquals(IdempotencyStatus.COMPLETED, record.getStatus());
         assertEquals(201, record.getResponseStatus());
         assertEquals("{\"id\":1}", record.getResponseBody());
-        verify(repository).save(record);
+        verify(repository).saveAndFlush(record);
     }
 
     @Test
     void fail_marksRecordAsFailed() {
         IdempotencyRecord record = IdempotencyRecord.builder()
+                .userId(userId)
+                .httpMethod(httpMethod)
+                .requestUri(requestUri)
                 .idempotencyKey(key)
                 .status(IdempotencyStatus.IN_FLIGHT)
                 .build();
 
-        when(repository.findByIdempotencyKey(key)).thenReturn(Optional.of(record));
+        when(repository.findForUpdate(userId, httpMethod, requestUri, key)).thenReturn(Optional.of(record));
 
-        service.fail(key);
+        service.fail(userId, httpMethod, requestUri, key);
 
         assertEquals(IdempotencyStatus.FAILED, record.getStatus());
-        verify(repository).save(record);
+        verify(repository).saveAndFlush(record);
     }
 }

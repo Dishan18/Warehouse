@@ -8,6 +8,7 @@ import com.dishan.warehouse.idempotency.filter.IdempotencyFilter;
 import com.dishan.warehouse.idempotency.service.IdempotencyService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -16,14 +17,20 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -45,6 +52,12 @@ class IdempotencyFilterTest {
     void setUp() {
         request = new MockHttpServletRequest();
         response = new MockHttpServletResponse();
+        SecurityContextHolder.clearContext();
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
     }
 
     @Test
@@ -78,13 +91,18 @@ class IdempotencyFilterTest {
         request.setContent("{\"productId\":\"abc\",\"quantity\":5}".getBytes(StandardCharsets.UTF_8));
 
         IdempotencyRecord replay = IdempotencyRecord.builder()
+                .userId("anonymous")
+                .httpMethod("POST")
+                .requestUri("/api/movements/outbound")
                 .idempotencyKey("test-key")
                 .status(IdempotencyStatus.COMPLETED)
                 .responseStatus(201)
                 .responseBody("{\"id\":\"mv-1\",\"quantity\":5}")
                 .build();
 
-        when(idempotencyService.processOrReserve(eq("test-key"), anyString())).thenReturn(replay);
+        when(idempotencyService.processOrReserve(
+                eq("anonymous"), eq("POST"), eq("/api/movements/outbound"), eq("test-key"), anyString())
+        ).thenReturn(replay);
 
         idempotencyFilter.doFilter(request, response, filterChain);
 
@@ -101,7 +119,9 @@ class IdempotencyFilterTest {
         request.addHeader(IdempotencyFilter.IDEMPOTENCY_HEADER, "test-key-new");
         request.setContent("{\"productId\":\"abc\",\"quantity\":5}".getBytes(StandardCharsets.UTF_8));
 
-        when(idempotencyService.processOrReserve(eq("test-key-new"), anyString())).thenReturn(null);
+        when(idempotencyService.processOrReserve(
+                eq("anonymous"), eq("POST"), eq("/api/movements/outbound"), eq("test-key-new"), anyString())
+        ).thenReturn(null);
 
         doAnswer(invocation -> {
             jakarta.servlet.http.HttpServletResponse resp = invocation.getArgument(1);
@@ -112,7 +132,41 @@ class IdempotencyFilterTest {
 
         idempotencyFilter.doFilter(request, response, filterChain);
 
-        verify(idempotencyService).complete(eq("test-key-new"), eq(200), eq("{\"success\":true}"));
+        verify(idempotencyService).complete(
+                eq("anonymous"), eq("POST"), eq("/api/movements/outbound"), eq("test-key-new"), eq(200), eq("{\"success\":true}")
+        );
+    }
+
+    @Test
+    void doFilter_withAuthenticatedUser_passesUsernameToService() throws ServletException, IOException {
+        Authentication auth = new UsernamePasswordAuthenticationToken(
+                "operator@warehouse.com",
+                "credentials",
+                List.of(new SimpleGrantedAuthority("OPERATOR"))
+        );
+        SecurityContextHolder.getContext().setAuthentication(auth);
+
+        request.setMethod("POST");
+        request.setRequestURI("/api/movements/inbound");
+        request.addHeader(IdempotencyFilter.IDEMPOTENCY_HEADER, "auth-key-1");
+        request.setContent("{\"qty\":10}".getBytes(StandardCharsets.UTF_8));
+
+        when(idempotencyService.processOrReserve(
+                eq("operator@warehouse.com"), eq("POST"), eq("/api/movements/inbound"), eq("auth-key-1"), anyString())
+        ).thenReturn(null);
+
+        doAnswer(invocation -> {
+            jakarta.servlet.http.HttpServletResponse resp = invocation.getArgument(1);
+            resp.setStatus(201);
+            resp.getWriter().write("{\"created\":true}");
+            return null;
+        }).when(filterChain).doFilter(any(), any());
+
+        idempotencyFilter.doFilter(request, response, filterChain);
+
+        verify(idempotencyService).complete(
+                eq("operator@warehouse.com"), eq("POST"), eq("/api/movements/inbound"), eq("auth-key-1"), eq(201), eq("{\"created\":true}")
+        );
     }
 
     @Test
@@ -122,7 +176,7 @@ class IdempotencyFilterTest {
         request.addHeader(IdempotencyFilter.IDEMPOTENCY_HEADER, "test-key");
         request.setContent("{\"data\":1}".getBytes(StandardCharsets.UTF_8));
 
-        when(idempotencyService.processOrReserve(eq("test-key"), anyString()))
+        when(idempotencyService.processOrReserve(anyString(), anyString(), anyString(), eq("test-key"), anyString()))
                 .thenThrow(new IdempotencyConflictException("Payload mismatch"));
 
         idempotencyFilter.doFilter(request, response, filterChain);
@@ -139,7 +193,7 @@ class IdempotencyFilterTest {
         request.addHeader(IdempotencyFilter.IDEMPOTENCY_HEADER, "test-key");
         request.setContent("{\"data\":1}".getBytes(StandardCharsets.UTF_8));
 
-        when(idempotencyService.processOrReserve(eq("test-key"), anyString()))
+        when(idempotencyService.processOrReserve(anyString(), anyString(), anyString(), eq("test-key"), anyString()))
                 .thenThrow(new IdempotencyInProgressException("Currently in progress"));
 
         idempotencyFilter.doFilter(request, response, filterChain);

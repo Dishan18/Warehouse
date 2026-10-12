@@ -249,13 +249,17 @@ d:\Warehouse
 [IdempotencyFilter]
          │
          ├──► Reads 'X-Idempotency-Key' (if absent -> pass-through)
+         ├──► Resolves userId from SecurityContext, method, and URI
          ├──► Wraps request in CachedBodyHttpServletRequest (caches byte stream)
-         ├──► Computes SHA-256 hash of payload
+         ├──► Computes SHA-256 hash of (userId + method + uri + body)
          ├──► Calls IdempotencyService.processOrReserve (REQUIRES_NEW transaction):
+         │       ├── Executes findForUpdate (SELECT ... FOR UPDATE row lock)
          │       ├── If COMPLETED & hash matches -> Replays cached HTTP response (Short-circuits!)
          │       ├── If COMPLETED & hash differs -> Returns 422 Unprocessable Entity
-         │       ├── If IN_FLIGHT -> Returns 409 Conflict
-         │       └── If New -> Inserts IN_FLIGHT slot in database
+         │       ├── If IN_FLIGHT & not expired -> Returns 409 Conflict
+         │       ├── If IN_FLIGHT expired -> Re-claims slot under lock and proceeds
+         │       ├── If FAILED -> Resets to IN_FLIGHT under lock and proceeds
+         │       └── If New -> Inserts IN_FLIGHT slot with uk_idempotency_scope constraint
          │
          ▼
 [MovementController.outbound()]
@@ -313,10 +317,10 @@ Crucially, when connecting via Supabase connection poolers, **Session mode (port
 ### Q3: How does your Idempotency implementation handle high-concurrency duplicate requests?
 **Answer**:
 Our idempotency engine uses a multi-layered defense:
-1. **Database-Level Uniqueness**: The `idempotency_records` table enforces a unique index constraint on `idempotency_key`.
-2. **State Machine (`IN_FLIGHT`, `COMPLETED`, `FAILED`)**: When request A arrives, it attempts to insert a record with status `IN_FLIGHT`.
-3. **Race Condition Resolution**: If request B arrives concurrently with the exact same key before request A finishes, request B's insert hits a `DataIntegrityViolationException` on the unique constraint. We catch this and return HTTP `409 Conflict` ("Request currently processing").
-4. **Payload Validation**: If request B arrives after request A has finished, we verify the SHA-256 digest of request B's body against request A's stored digest. If they match, we replay the cached 2xx response. If they differ, we return HTTP `422 Unprocessable Entity` to prevent key hijacking.
+1. **Scoped Uniqueness**: The `idempotency_records` table enforces a composite uniqueness constraint on `(user_id, http_method, request_uri, idempotency_key)`. Unrelated requests from different users or hitting different endpoints never collide even if they generate identical key strings.
+2. **Pessimistic Lock Recovery**: When re-claiming an expired `IN_FLIGHT` record or retrying a `FAILED` record, `IdempotencyService` queries PostgreSQL using `@Lock(LockModeType.PESSIMISTIC_WRITE)` (`SELECT ... FOR UPDATE`). Concurrent retries are serialized in PostgreSQL: exactly one thread acquires the row lock and advances the status or expiration, while competing threads unblock, observe the renewed `IN_FLIGHT` status, and are blocked with HTTP `409 Conflict`.
+3. **State Machine (`IN_FLIGHT`, `COMPLETED`, `FAILED`)**: When an initial request arrives, it reserves an `IN_FLIGHT` slot in an autonomous `REQUIRES_NEW` transaction. Concurrent initial inserts race against the unique constraint; the loser catches `DataIntegrityViolationException` and returns HTTP `409 Conflict`.
+4. **Cryptographic Payload Validation**: Completed records store the SHA-256 digest of `(userId + method + uri + body)`. Identical requests replay the cached 2xx response. Different payloads reusing the same key are rejected with HTTP `422 Unprocessable Entity` to prevent payload mismatch and key hijacking.
 
 ---
 

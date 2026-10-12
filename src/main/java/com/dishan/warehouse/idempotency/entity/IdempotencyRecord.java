@@ -7,9 +7,18 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "idempotency_records", indexes = {
-        @Index(name = "idx_idempotency_key", columnList = "idempotency_key", unique = true)
-})
+@Table(
+        name = "idempotency_records",
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_idempotency_scope",
+                        columnNames = {"user_id", "http_method", "request_uri", "idempotency_key"}
+                )
+        },
+        indexes = {
+                @Index(name = "idx_idempotency_scope", columnList = "user_id, http_method, request_uri, idempotency_key")
+        }
+)
 @Getter
 @Setter
 @NoArgsConstructor
@@ -21,7 +30,16 @@ public class IdempotencyRecord {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(name = "idempotency_key", nullable = false, unique = true, length = 128)
+    @Column(name = "user_id", nullable = false, length = 150)
+    private String userId;
+
+    @Column(name = "http_method", nullable = false, length = 10)
+    private String httpMethod;
+
+    @Column(name = "request_uri", nullable = false, length = 255)
+    private String requestUri;
+
+    @Column(name = "idempotency_key", nullable = false, length = 128)
     private String idempotencyKey;
 
     @Column(name = "request_hash", nullable = false, length = 64)
