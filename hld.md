@@ -95,7 +95,7 @@ flowchart TB
 - **Role-Based Access Control (RBAC)**: Enforces role permissions across three tiers:
   - `ADMIN`: Full access to user management, settings, audit logs, and stock movements.
   - `MANAGER`: Management of products, suppliers, stock movements, and reports.
-- **Idempotency Interception**: Inspects `X-Idempotency-Key` headers on mutating requests (`POST`, `PUT`, `PATCH`). Scoped by authenticated user, HTTP method, request URI, and key, backed by composite unique database constraints. Uses pessimistic row locks (`SELECT ... FOR UPDATE`) during recovery of expired in-flight or failed records to eliminate recovery race conditions, short-circuiting duplicate executions and returning cached responses.
+- **Idempotency Interception & Crash Recovery**: Inspects `X-Idempotency-Key` headers on mutating requests (`POST`, `PUT`, `PATCH`). Scoped by authenticated user, HTTP method, request URI, and key, backed by composite unique database constraints. Uses pessimistic row locks (`SELECT ... FOR UPDATE`) during recovery of expired in-flight or failed records to eliminate recovery race conditions. Ties stock movements directly to `idempotencyRecordId` with a database uniqueness constraint, and performs a double-check under the product lock to eliminate duplicate executions even after worker crashes or lease expiration.
 
 ### 3.3 Domain Business Engine
 - **Stock Movement Engine**: Orchestrates stock mutations (`INBOUND`, `OUTBOUND`, `ADJUSTMENT`). Manages quantity snapshots (`beforeQuantity`, `afterQuantity`), checks min/max constraints, and publishes domain events.

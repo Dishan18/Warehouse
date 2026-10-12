@@ -13,7 +13,7 @@ Smart Warehouse is an enterprise-grade warehouse inventory and stock management 
 ## Key Engineering Highlights
 
 - **Pessimistic Locking Concurrency Control**: Prevents race conditions, lost updates, and negative inventory across all mutating stock operations (`inbound`, `outbound`, `adjust`) via row-level `SELECT ... FOR UPDATE` queries in PostgreSQL.
-- **Scoped Idempotency Engine with Pessimistic Recovery**: Intercepts mutating endpoints with `X-Idempotency-Key` headers, scoping keys by user, HTTP method, and endpoint under composite unique database constraints. Employs row-level pessimistic locks (`SELECT ... FOR UPDATE`) during recovery of expired in-flight or failed records to eliminate recovery race conditions.
+- **Scoped Idempotency Engine with Crash Recovery**: Intercepts mutating endpoints with `X-Idempotency-Key` headers, scoping keys by user, HTTP method, and endpoint under composite unique database constraints. Employs row-level pessimistic locks (`SELECT ... FOR UPDATE`) during recovery of expired in-flight or failed records, binds stock movements to unique record IDs with database constraints, and performs double-checks under product locks to eliminate crash windows and double deductions.
 - **Transaction-Bound WebSocket Alerts**: Emits real-time STOMP threshold alerts using Spring's `@TransactionalEventListener(phase = AFTER_COMMIT)` on a dedicated async thread pool, preventing false alerts on transaction rollback.
 - **Stateless RBAC Security**: JWT-based authentication enforcing granular permissions across ADMIN, MANAGER, and EMPLOYEE roles.
 - **Cloud Database (Zero Local Docker Dependency)**: Fully configured for cloud Supabase PostgreSQL using SSL session pooling, with automatic schema synchronization and startup seed data.

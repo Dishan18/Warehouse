@@ -137,20 +137,20 @@ stateDiagram-v2
     422Conflict --> [*]
 ```
 
-### 3.2 Pessimistic Lock Recovery on Expired and Failed Keys
-When re-claiming an expired `IN_FLIGHT` record or retrying a `FAILED` record, concurrent requests could race if read without row locks.
-
-To eliminate this race:
-1. `IdempotencyRepository.findForUpdate(...)` queries PostgreSQL using `@Lock(LockModeType.PESSIMISTIC_WRITE)`:
+### 3.2 Pessimistic Lock Recovery and Unconditional Payload Hash Validation
+Whenever an existing record is matched in the database under row lock:
+1. **Unconditional Payload Hash Verification**: The incoming payload hash is checked immediately. If the hash differs from the stored hash, the request is rejected with `IdempotencyConflictException` (HTTP 422 Unprocessable Entity), regardless of whether the record is `COMPLETED`, `FAILED`, or expired `IN_FLIGHT`. This prevents clients from reusing existing keys with altered request payloads.
+2. `IdempotencyRepository.findForUpdate(...)` queries PostgreSQL using `@Lock(LockModeType.PESSIMISTIC_WRITE)`:
    ```sql
    SELECT r FROM idempotency_records r 
    WHERE r.user_id = ? AND r.http_method = ? AND r.request_uri = ? AND r.idempotency_key = ? 
    FOR UPDATE;
    ```
-2. The first thread acquires the exclusive row lock in PostgreSQL.
-3. If the record is expired `IN_FLIGHT` or `FAILED`, the winning thread updates the status to `IN_FLIGHT`, refreshes `expires_at` to `now() + 24h`, flushes changes, and commits.
-4. When subsequent threads acquire the row lock, they read the fresh committed state: status is now `IN_FLIGHT` with a future expiration timestamp.
-5. Subsequent threads immediately throw `IdempotencyInProgressException` (HTTP 409 Conflict), guaranteeing that exactly one request recovers and executes business logic.
+3. The first thread acquires the exclusive row lock in PostgreSQL.
+4. If the record is expired `IN_FLIGHT` or `FAILED`, the winning thread updates the status to `IN_FLIGHT`, grants a 2-minute processing lease (`expires_at = now() + 2m`), flushes changes, and commits.
+5. When subsequent threads acquire the row lock, they read the fresh committed state: status is now `IN_FLIGHT` with an active expiration timestamp.
+6. Subsequent concurrent threads immediately throw `IdempotencyInProgressException` (HTTP 409 Conflict), guaranteeing that exactly one request recovers and proceeds to business logic.
+7. Upon successful 2xx execution, `expires_at` is extended to `now() + 24h` to retain the cached response.
 
 ### 3.3 Request Caching and Servlet Stream Handling
 Under standard Java Servlet specifications, `request.getInputStream()` can only be read once. If a filter reads the input stream to compute a hash, Spring MVC `@RequestBody` deserialization fails with `HttpMessageNotReadableException`.
@@ -160,15 +160,30 @@ To solve this:
 2. `ContentCachingResponseWrapper`: Wraps `HttpServletResponse` during downstream execution. Once the controller produces output, the wrapper captures the response byte stream, status code, and headers without prematurely writing to the network socket.
 3. [`IdempotencyFilter`](file:///d:/Warehouse/src/main/java/com/dishan/warehouse/idempotency/filter/IdempotencyFilter.java):
    - Computes request hash scoped to `userId:httpMethod:requestUri:bodyBytes`.
+   - On `COMPLETED`: Writes cached response directly and sets `X-Cache-Lookup: HIT-IDEMPOTENT`.
+   - On `IN_FLIGHT`: Sets `IdempotencyContext` containing `(recordId, userId, httpMethod, requestUri, key)` for downstream service execution.
    - Status 2xx: Caches payload in `idempotency_records` table, transitions to `COMPLETED`, calls `responseWrapper.copyBodyToResponse()`.
    - Status 4xx/5xx: Calls `idempotencyService.fail(userId, httpMethod, requestUri, key)` to allow retry, calls `responseWrapper.copyBodyToResponse()`.
 
 ### 3.4 Transaction Isolation with `REQUIRES_NEW`
 In [`IdempotencyService.java`](file:///d:/Warehouse/src/main/java/com/dishan/warehouse/idempotency/service/IdempotencyService.java):
-All idempotency status mutations run inside `@Transactional(propagation = Propagation.REQUIRES_NEW)`.
+All idempotency reservation mutations run inside `@Transactional(propagation = Propagation.REQUIRES_NEW)`.
 This isolates the idempotency audit record from the main application business transaction:
 - If the stock deduction business transaction rolls back due to a business exception, the `IdempotencyRecord` status update to `FAILED` is not rolled back, permitting subsequent client retries.
 - When `IN_FLIGHT` is saved, it commits immediately to PostgreSQL so any competing concurrent thread will instantly see the locked slot.
+
+### 3.5 Crash Recovery Architecture and Lock Double-Check Protection
+To eliminate any window where an inventory mutation commits but the application crashes before the idempotency record is marked `COMPLETED`:
+1. **Scoped Record ID Linkage**:
+   The unique `IdempotencyRecord.id` (UUID) is propagated into the business transaction via `IdempotencyContext`.
+   The `StockMovement` entity persists this ID under `@Column(name = "idempotency_record_id", unique = true)` with a database constraint `@UniqueConstraint(name = "uk_stock_movement_idempotency_record")`.
+2. **Double-Check Under Pessimistic Product Lock**:
+   In [`MovementServiceImpl.java`](file:///d:/Warehouse/src/main/java/com/dishan/warehouse/movement/service/impl/MovementServiceImpl.java):
+   - **Pre-lock check**: Examines `findByIdempotencyRecordId(recordId)`. If already committed, immediately replays the response without waiting for product locks.
+   - **Product Lock**: Acquires `findProductForUpdate(productId)` row lock in PostgreSQL.
+   - **Post-lock re-check**: Re-checks `findByIdempotencyRecordId(recordId)` under the acquired lock. If another worker committed while this worker was waiting for the lock, it immediately returns the committed movement without mutating stock.
+3. **Database-Level Storage Engine Constraint**:
+   If an unexpected race occurs, the database unique constraint `uk_stock_movement_idempotency_record` raises a unique violation error and aborts the transaction, making duplicate stock movement insertion impossible.
 
 ---
 

@@ -5,10 +5,20 @@
 Follow these exact steps to boot the application and verify all features against the live **Supabase PostgreSQL** cloud database.
 
 ### Step 1: Launch Spring Boot Backend
-In PowerShell / Terminal:
+Configure your administrator password (and optionally your database credentials) in the environment, then start the server:
+
+In PowerShell:
 ```powershell
+$env:ADMIN_PASSWORD = "Admin@123"
 .\mvnw.cmd spring-boot:run -Dspring-boot.run.profiles=dev
 ```
+
+In Linux / macOS Bash:
+```bash
+export ADMIN_PASSWORD="Admin@123"
+./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
+```
+
 Wait for the console banner:
 ```
 Started SmartWarehouseApplication in ~15 seconds
@@ -29,7 +39,7 @@ http://localhost:8080/swagger-ui.html
 ---
 
 ### Step 3: Authenticate & Obtain Bearer Token
-Run in a new terminal window:
+Run in a new terminal window using the configured `ADMIN_PASSWORD`:
 ```bash
 curl -s -X POST http://localhost:8080/api/auth/login \
   -H "Content-Type: application/json" \
@@ -127,6 +137,28 @@ curl -i -X POST http://localhost:8080/api/movements/outbound \
 **Result**:
 - HTTP `422 Unprocessable Entity`
 - Message: `"Idempotency key reused with different request payload"`
+
+#### 6D. Scoped Key Isolation (Reusing Key Across Different Endpoints or Users)
+Send an inbound addition request reusing the same key `demo-key-uuid-101`:
+```bash
+curl -i -X POST http://localhost:8080/api/movements/inbound \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "X-Idempotency-Key: demo-key-uuid-101" \
+  -d "{\"productId\":\"<PRODUCT_ID>\",\"quantity\":3,\"reason\":\"Inbound shipment restocking\"}"
+```
+**Result**:
+- HTTP `200 OK`
+- `beforeQuantity: 6`, `afterQuantity: 9`
+- Because the idempotency key is scoped by `(user_id, http_method, request_uri, key)`, this inbound request receives its own unique `IdempotencyRecord` and its own unique `StockMovement.idempotency_record_id`. It does not collide with or replay the outbound movement.
+
+#### 6E. Crash Recovery & Lock Double-Check Protection
+If an application worker crashes after the stock transaction commits but before the HTTP response cache completes:
+- The `StockMovement` row is already committed with its unique `idempotency_record_id`.
+- On client retry after the 2-minute in-flight lease expires, the request enters `MovementServiceImpl`.
+- The service performs a check before acquiring the product lock, and re-checks under the pessimistic product lock (`findProductForUpdate`).
+- It discovers the committed movement by `idempotency_record_id`, immediately replays the response, and never applies duplicate stock mutations.
+- The database constraint `UNIQUE(idempotency_record_id)` guarantees at the storage engine level that duplicate stock movement rows cannot be inserted.
 
 ---
 
