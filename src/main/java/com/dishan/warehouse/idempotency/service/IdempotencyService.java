@@ -118,20 +118,4 @@ public class IdempotencyService {
             log.debug("Marked idempotency key '{}' as FAILED", key);
         });
     }
-
-    // Convenience overloads with default scope
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public IdempotencyRecord processOrReserve(String key, String requestHash) {
-        return processOrReserve("anonymous", "POST", "/api/default", key, requestHash);
-    }
-
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void complete(String key, int responseStatus, String responseBody) {
-        complete("anonymous", "POST", "/api/default", key, responseStatus, responseBody);
-    }
-
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void fail(String key) {
-        fail("anonymous", "POST", "/api/default", key);
-    }
 }

@@ -97,7 +97,7 @@ Once started:
 
 Default administrator account seeded on startup:
 - **Email**: `admin@warehouse.com`
-- **Password**: `Admin@123`
+- **Password**: Configured via the `ADMIN_PASSWORD` environment variable (see `.env.example`)
 
 ### 4. Run the Frontend (Optional)
 To run the React web interface:

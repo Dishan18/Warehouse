@@ -31,11 +31,5 @@ public interface IdempotencyRepository extends JpaRepository<IdempotencyRecord, 
             String idempotencyKey
     );
 
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT r FROM IdempotencyRecord r WHERE r.idempotencyKey = :idempotencyKey")
-    Optional<IdempotencyRecord> findByIdempotencyKeyForUpdate(@Param("idempotencyKey") String idempotencyKey);
-
-    Optional<IdempotencyRecord> findByIdempotencyKey(String idempotencyKey);
-
     void deleteByExpiresAtBefore(LocalDateTime now);
 }
