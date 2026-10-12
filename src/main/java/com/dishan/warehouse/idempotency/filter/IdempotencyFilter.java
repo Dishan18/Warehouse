@@ -2,6 +2,7 @@ package com.dishan.warehouse.idempotency.filter;
 
 import com.dishan.warehouse.idempotency.IdempotencyContext;
 import com.dishan.warehouse.idempotency.entity.IdempotencyRecord;
+import com.dishan.warehouse.idempotency.entity.IdempotencyStatus;
 import com.dishan.warehouse.idempotency.exception.IdempotencyConflictException;
 import com.dishan.warehouse.idempotency.exception.IdempotencyInProgressException;
 import com.dishan.warehouse.idempotency.service.IdempotencyService;
@@ -24,6 +25,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Set;
+import java.util.UUID;
 
 @Slf4j
 @Component
@@ -63,22 +65,23 @@ public class IdempotencyFilter extends OncePerRequestFilter {
         String requestHash = computeRequestHash(userId, httpMethod, requestUri, cachedRequest.getCachedBody());
 
         try {
-            IdempotencyRecord replayRecord = idempotencyService.processOrReserve(userId, httpMethod, requestUri, key, requestHash);
+            IdempotencyRecord record = idempotencyService.processOrReserve(userId, httpMethod, requestUri, key, requestHash);
 
-            if (replayRecord != null) {
+            if (record != null && record.getStatus() == IdempotencyStatus.COMPLETED) {
                 // Replay saved response
-                response.setStatus(replayRecord.getResponseStatus());
+                response.setStatus(record.getResponseStatus());
                 response.setContentType("application/json");
                 response.setHeader("X-Cache-Lookup", "HIT-IDEMPOTENT");
-                if (replayRecord.getResponseBody() != null) {
-                    response.getOutputStream().write(replayRecord.getResponseBody().getBytes(StandardCharsets.UTF_8));
+                if (record.getResponseBody() != null) {
+                    response.getOutputStream().write(record.getResponseBody().getBytes(StandardCharsets.UTF_8));
                 }
                 response.flushBuffer();
                 return;
             }
 
-            // Newly reserved: establish idempotency context for downstream services in the transaction
-            IdempotencyContext.set(userId, httpMethod, requestUri, key);
+            // Newly reserved or reclaimed IN_FLIGHT: establish scoped idempotency context for downstream services
+            UUID recordId = (record != null) ? record.getId() : null;
+            IdempotencyContext.set(recordId, userId, httpMethod, requestUri, key);
 
             // Proceed through downstream chain and capture output
             ContentCachingResponseWrapper responseWrapper = new ContentCachingResponseWrapper(response);

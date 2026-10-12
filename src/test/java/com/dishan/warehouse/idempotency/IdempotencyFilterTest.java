@@ -25,6 +25,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -119,11 +120,17 @@ class IdempotencyFilterTest {
         request.addHeader(IdempotencyFilter.IDEMPOTENCY_HEADER, "test-key-new");
         request.setContent("{\"productId\":\"abc\",\"quantity\":5}".getBytes(StandardCharsets.UTF_8));
 
+        IdempotencyRecord inFlight = IdempotencyRecord.builder()
+                .id(UUID.randomUUID())
+                .status(IdempotencyStatus.IN_FLIGHT)
+                .build();
+
         when(idempotencyService.processOrReserve(
                 eq("anonymous"), eq("POST"), eq("/api/movements/outbound"), eq("test-key-new"), anyString())
-        ).thenReturn(null);
+        ).thenReturn(inFlight);
 
         doAnswer(invocation -> {
+            assertEquals(inFlight.getId(), com.dishan.warehouse.idempotency.IdempotencyContext.get().recordId());
             jakarta.servlet.http.HttpServletResponse resp = invocation.getArgument(1);
             resp.setStatus(200);
             resp.getWriter().write("{\"success\":true}");
@@ -151,11 +158,17 @@ class IdempotencyFilterTest {
         request.addHeader(IdempotencyFilter.IDEMPOTENCY_HEADER, "auth-key-1");
         request.setContent("{\"qty\":10}".getBytes(StandardCharsets.UTF_8));
 
+        IdempotencyRecord inFlight = IdempotencyRecord.builder()
+                .id(UUID.randomUUID())
+                .status(IdempotencyStatus.IN_FLIGHT)
+                .build();
+
         when(idempotencyService.processOrReserve(
                 eq("operator@warehouse.com"), eq("POST"), eq("/api/movements/inbound"), eq("auth-key-1"), anyString())
-        ).thenReturn(null);
+        ).thenReturn(inFlight);
 
         doAnswer(invocation -> {
+            assertEquals(inFlight.getId(), com.dishan.warehouse.idempotency.IdempotencyContext.get().recordId());
             jakarta.servlet.http.HttpServletResponse resp = invocation.getArgument(1);
             resp.setStatus(201);
             resp.getWriter().write("{\"created\":true}");

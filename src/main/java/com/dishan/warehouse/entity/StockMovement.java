@@ -10,9 +10,15 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "stock_movement", indexes = {
-        @Index(name = "idx_stock_movement_idempotency", columnList = "idempotency_key")
-})
+@Table(
+        name = "stock_movement",
+        uniqueConstraints = {
+                @UniqueConstraint(name = "uk_stock_movement_idempotency_record", columnNames = "idempotency_record_id")
+        },
+        indexes = {
+                @Index(name = "idx_stock_movement_idempotency", columnList = "idempotency_key")
+        }
+)
 @Getter
 @Setter
 @NoArgsConstructor
@@ -50,6 +56,9 @@ public class StockMovement {
 
     @Column(nullable = false)
     private String performedBy;
+
+    @Column(name = "idempotency_record_id", unique = true)
+    private UUID idempotencyRecordId;
 
     @Column(name = "idempotency_key", length = 128)
     private String idempotencyKey;

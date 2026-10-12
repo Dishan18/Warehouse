@@ -15,6 +15,8 @@ public interface StockMovementRepository
 
     List<StockMovement> findTop5ByOrderByCreatedAtDesc();
 
+    java.util.Optional<StockMovement> findByIdempotencyRecordId(UUID idempotencyRecordId);
+
     java.util.Optional<StockMovement> findByIdempotencyKey(String idempotencyKey);
 
     List<StockMovement> findByCreatedAtAfter(java.time.LocalDateTime date);

@@ -164,9 +164,10 @@ class MovementServiceImplTest {
     }
 
     @Test
-    void outbound_whenIdempotencyKeyAlreadyCommitted_replaysWithoutMutatingStock() {
+    void outbound_whenIdempotencyRecordAlreadyCommitted_replaysWithoutMutatingStock() {
+        UUID recordId = UUID.randomUUID();
         String idempotencyKey = "idem-replay-key";
-        IdempotencyContext.set("admin", "POST", "/api/movements/outbound", idempotencyKey);
+        IdempotencyContext.set(recordId, "admin", "POST", "/api/movements/outbound", idempotencyKey);
 
         try {
             StockMovement committedMovement = StockMovement.builder()
@@ -177,6 +178,7 @@ class MovementServiceImplTest {
                     .beforeQuantity(10)
                     .afterQuantity(5)
                     .performedBy("admin@test.com")
+                    .idempotencyRecordId(recordId)
                     .idempotencyKey(idempotencyKey)
                     .build();
 
@@ -189,7 +191,7 @@ class MovementServiceImplTest {
                     .afterQuantity(5)
                     .build();
 
-            when(movementRepository.findByIdempotencyKey(idempotencyKey)).thenReturn(Optional.of(committedMovement));
+            when(movementRepository.findByIdempotencyRecordId(recordId)).thenReturn(Optional.of(committedMovement));
             when(movementMapper.toResponse(committedMovement)).thenReturn(expectedResponse);
 
             MovementResponse response = movementService.outbound(request, "admin@test.com");
@@ -206,12 +208,66 @@ class MovementServiceImplTest {
     }
 
     @Test
-    void inbound_withIdempotencyContext_persistsIdempotencyKeyOnStockMovement() {
-        String idempotencyKey = "idem-inbound-key";
-        IdempotencyContext.set("admin", "POST", "/api/movements/inbound", idempotencyKey);
+    void outbound_whenConcurrentWorkerCommittedWhileWaitingForProductLock_replaysUnderLockWithoutDoubleDeduction() {
+        UUID recordId = UUID.randomUUID();
+        String idempotencyKey = "race-key";
+        IdempotencyContext.set(recordId, "admin", "POST", "/api/movements/outbound", idempotencyKey);
 
         try {
-            when(movementRepository.findByIdempotencyKey(idempotencyKey)).thenReturn(Optional.empty());
+            StockMovement committedMovement = StockMovement.builder()
+                    .id(UUID.randomUUID())
+                    .product(product)
+                    .type(MovementType.OUTBOUND)
+                    .quantity(5)
+                    .beforeQuantity(10)
+                    .afterQuantity(5)
+                    .performedBy("admin@test.com")
+                    .idempotencyRecordId(recordId)
+                    .idempotencyKey(idempotencyKey)
+                    .build();
+
+            MovementResponse expectedResponse = MovementResponse.builder()
+                    .id(committedMovement.getId())
+                    .productId(product.getId())
+                    .type(MovementType.OUTBOUND)
+                    .quantity(5)
+                    .beforeQuantity(10)
+                    .afterQuantity(5)
+                    .build();
+
+            // First lookup (before lock) returns empty (other worker still running)
+            // Second lookup (after lock) returns committed movement (other worker committed and released lock)
+            when(movementRepository.findByIdempotencyRecordId(recordId))
+                    .thenReturn(Optional.empty())
+                    .thenReturn(Optional.of(committedMovement));
+
+            when(productRepository.findByIdForUpdate(product.getId())).thenReturn(Optional.of(product));
+            when(movementMapper.toResponse(committedMovement)).thenReturn(expectedResponse);
+
+            MovementResponse response = movementService.outbound(request, "admin@test.com");
+
+            assertNotNull(response);
+            assertEquals(expectedResponse.getId(), response.getId());
+            // Product lock WAS acquired, but no update or save occurred because of re-check under lock
+            verify(productRepository).findByIdForUpdate(product.getId());
+            verify(productRepository, never()).save(any());
+            verify(movementRepository, never()).save(any());
+            verify(movementRepository, never()).saveAndFlush(any());
+            // Product quantity remains 10 (untouched)
+            assertEquals(10, product.getQuantity());
+        } finally {
+            IdempotencyContext.clear();
+        }
+    }
+
+    @Test
+    void inbound_withIdempotencyContext_persistsIdempotencyRecordIdAndKeyOnStockMovement() {
+        UUID recordId = UUID.randomUUID();
+        String idempotencyKey = "idem-inbound-key";
+        IdempotencyContext.set(recordId, "admin", "POST", "/api/movements/inbound", idempotencyKey);
+
+        try {
+            when(movementRepository.findByIdempotencyRecordId(recordId)).thenReturn(Optional.empty());
             when(productRepository.findByIdForUpdate(product.getId())).thenReturn(Optional.of(product));
             when(movementRepository.save(any(StockMovement.class)))
                     .thenAnswer(invocation -> invocation.getArgument(0));
@@ -223,6 +279,7 @@ class MovementServiceImplTest {
             verify(movementRepository).save(captor.capture());
 
             StockMovement savedMovement = captor.getValue();
+            assertEquals(recordId, savedMovement.getIdempotencyRecordId());
             assertEquals(idempotencyKey, savedMovement.getIdempotencyKey());
         } finally {
             IdempotencyContext.clear();

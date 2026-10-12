@@ -40,12 +40,14 @@ class IdempotencyServiceTest {
     private final String hash = "abc123hash";
 
     @Test
-    void processOrReserve_whenNewKey_savesInFlightAndReturnsNull() {
+    void processOrReserve_whenNewKey_savesAndReturnsInFlightRecord() {
         when(repository.findForUpdate(userId, httpMethod, requestUri, key)).thenReturn(Optional.empty());
+        when(repository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         IdempotencyRecord result = service.processOrReserve(userId, httpMethod, requestUri, key, hash);
 
-        assertNull(result);
+        assertNotNull(result);
+        assertEquals(IdempotencyStatus.IN_FLIGHT, result.getStatus());
         ArgumentCaptor<IdempotencyRecord> captor = ArgumentCaptor.forClass(IdempotencyRecord.class);
         verify(repository).saveAndFlush(captor.capture());
 
@@ -132,10 +134,12 @@ class IdempotencyServiceTest {
                 .build();
 
         when(repository.findForUpdate(userId, httpMethod, requestUri, key)).thenReturn(Optional.of(expiredInFlight));
+        when(repository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         IdempotencyRecord result = service.processOrReserve(userId, httpMethod, requestUri, key, hash);
 
-        assertNull(result);
+        assertNotNull(result);
+        assertEquals(IdempotencyStatus.IN_FLIGHT, result.getStatus());
         verify(repository).saveAndFlush(expiredInFlight);
         assertEquals(hash, expiredInFlight.getRequestHash());
         assertTrue(expiredInFlight.getExpiresAt().isAfter(LocalDateTime.now()));
@@ -173,10 +177,12 @@ class IdempotencyServiceTest {
                 .build();
 
         when(repository.findForUpdate(userId, httpMethod, requestUri, key)).thenReturn(Optional.of(failedRecord));
+        when(repository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         IdempotencyRecord result = service.processOrReserve(userId, httpMethod, requestUri, key, hash);
 
-        assertNull(result);
+        assertNotNull(result);
+        assertEquals(IdempotencyStatus.IN_FLIGHT, result.getStatus());
         verify(repository).saveAndFlush(failedRecord);
         assertEquals(IdempotencyStatus.IN_FLIGHT, failedRecord.getStatus());
         assertEquals(hash, failedRecord.getRequestHash());

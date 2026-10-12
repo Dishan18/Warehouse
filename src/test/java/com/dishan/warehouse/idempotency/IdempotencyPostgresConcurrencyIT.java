@@ -88,7 +88,7 @@ class IdempotencyPostgresConcurrencyIT {
                     IdempotencyRecord record = idempotencyService.processOrReserve(
                             userId, method, uri, key, payloadHash
                     );
-                    if (record == null) {
+                    if (record != null && record.getStatus() == IdempotencyStatus.IN_FLIGHT) {
                         // Recovered slot and reserved to proceed
                         successProceedCount.incrementAndGet();
                     }
@@ -158,7 +158,7 @@ class IdempotencyPostgresConcurrencyIT {
                     IdempotencyRecord record = idempotencyService.processOrReserve(
                             userId, method, uri, key, payloadHash
                     );
-                    if (record == null) {
+                    if (record != null && record.getStatus() == IdempotencyStatus.IN_FLIGHT) {
                         successProceedCount.incrementAndGet();
                     }
                 } catch (IdempotencyInProgressException ex) {
@@ -213,7 +213,7 @@ class IdempotencyPostgresConcurrencyIT {
                     IdempotencyRecord record = idempotencyService.processOrReserve(
                             userId, method, uri, key, hash
                     );
-                    if (record == null) {
+                    if (record != null && record.getStatus() == IdempotencyStatus.IN_FLIGHT) {
                         successProceedCount.incrementAndGet();
                     }
                 } catch (IdempotencyInProgressException ex) {
@@ -245,18 +245,23 @@ class IdempotencyPostgresConcurrencyIT {
         IdempotencyRecord r1 = idempotencyService.processOrReserve(
                 "userA@warehouse.com", "POST", "/api/movements/inbound", commonKey, "hashA"
         );
-        assertThat(r1).isNull(); // Successfully reserved
+        assertThat(r1).isNotNull();
+        assertThat(r1.getStatus()).isEqualTo(IdempotencyStatus.IN_FLIGHT);
 
         // User B calls /api/movements/inbound with the same key
         IdempotencyRecord r2 = idempotencyService.processOrReserve(
                 "userB@warehouse.com", "POST", "/api/movements/inbound", commonKey, "hashB"
         );
-        assertThat(r2).isNull(); // Successfully reserved, no collision!
+        assertThat(r2).isNotNull();
+        assertThat(r2.getStatus()).isEqualTo(IdempotencyStatus.IN_FLIGHT);
+        assertThat(r2.getId()).isNotEqualTo(r1.getId());
 
         // User A calls /api/movements/outbound with the same key
         IdempotencyRecord r3 = idempotencyService.processOrReserve(
                 "userA@warehouse.com", "POST", "/api/movements/outbound", commonKey, "hashA2"
         );
-        assertThat(r3).isNull(); // Successfully reserved, no collision across endpoints!
+        assertThat(r3).isNotNull();
+        assertThat(r3.getStatus()).isEqualTo(IdempotencyStatus.IN_FLIGHT);
+        assertThat(r3.getId()).isNotEqualTo(r1.getId());
     }
 }

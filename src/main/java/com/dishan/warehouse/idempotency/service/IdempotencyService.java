@@ -61,8 +61,7 @@ public class IdempotencyService {
                 if (existing.getExpiresAt().isBefore(LocalDateTime.now())) {
                     log.info("Idempotency key '{}' had expired IN_FLIGHT state, re-claiming slot under lock", key);
                     existing.setExpiresAt(LocalDateTime.now().plusMinutes(2));
-                    repository.saveAndFlush(existing);
-                    return null;
+                    return repository.saveAndFlush(existing);
                 }
                 log.warn("Idempotency key '{}' currently in progress", key);
                 throw new IdempotencyInProgressException("Request with this idempotency key is currently processing");
@@ -73,8 +72,7 @@ public class IdempotencyService {
                 log.info("Idempotency key '{}' had FAILED state, re-claiming slot for retry under lock", key);
                 existing.setStatus(IdempotencyStatus.IN_FLIGHT);
                 existing.setExpiresAt(LocalDateTime.now().plusMinutes(2));
-                repository.saveAndFlush(existing);
-                return null;
+                return repository.saveAndFlush(existing);
             }
         }
 
@@ -90,8 +88,7 @@ public class IdempotencyService {
                     .createdAt(LocalDateTime.now())
                     .expiresAt(LocalDateTime.now().plusMinutes(2))
                     .build();
-            repository.saveAndFlush(record);
-            return null;
+            return repository.saveAndFlush(record);
         } catch (DataIntegrityViolationException ex) {
             log.warn("Concurrent insert race for idempotency key '{}' for user '{}' on {} {}",
                     key, userId, httpMethod, requestUri);

@@ -57,6 +57,12 @@ public class MovementServiceImpl implements MovementService {
         // PESSIMISTIC_WRITE lock: ensures concurrent inbound updates serialize and prevent lost updates
         Product product = findProductForUpdate(request.getProductId());
 
+        // Re-check under pessimistic product lock to catch any concurrent worker that committed while we waited for lock
+        replayed = checkCommittedIdempotentMovement();
+        if (replayed != null) {
+            return replayed;
+        }
+
         int before = product.getQuantity();
         int after = before + request.getQuantity();
 
@@ -76,6 +82,12 @@ public class MovementServiceImpl implements MovementService {
         // PESSIMISTIC_WRITE lock: blocks concurrent transactions from reading a stale
         // quantity for this product until this transaction commits, preventing negative stock.
         Product product = findProductForUpdate(request.getProductId());
+
+        // Re-check under pessimistic product lock to catch any concurrent worker that committed while we waited for lock
+        replayed = checkCommittedIdempotentMovement();
+        if (replayed != null) {
+            return replayed;
+        }
 
         int before = product.getQuantity();
 
@@ -101,8 +113,14 @@ public class MovementServiceImpl implements MovementService {
         // PESSIMISTIC_WRITE lock: ensures the before-quantity we snapshot is the
         // authoritative committed value, not a dirty read from a concurrent transaction.
         Product product = findProductForUpdate(request.getProductId());
-        int newTotal = request.getQuantity();
 
+        // Re-check under pessimistic product lock to catch any concurrent worker that committed while we waited for lock
+        replayed = checkCommittedIdempotentMovement();
+        if (replayed != null) {
+            return replayed;
+        }
+
+        int newTotal = request.getQuantity();
         int before = product.getQuantity();
 
         return register(product, MovementType.ADJUSTMENT, newTotal,
@@ -111,11 +129,11 @@ public class MovementServiceImpl implements MovementService {
 
     private MovementResponse checkCommittedIdempotentMovement() {
         IdempotencyContext.Scope scope = IdempotencyContext.get();
-        if (scope != null && scope.key() != null && !scope.key().isBlank()) {
-            return movementRepository.findByIdempotencyKey(scope.key())
+        if (scope != null && scope.recordId() != null) {
+            return movementRepository.findByIdempotencyRecordId(scope.recordId())
                     .map(committed -> {
-                        log.info("Idempotent replay: found committed movement for key '{}', returning without re-executing stock mutation",
-                                scope.key());
+                        log.info("Idempotent replay: found committed movement for recordId '{}' (key '{}'), returning without re-executing stock mutation",
+                                scope.recordId(), scope.key());
                         return movementMapper.toResponse(committed);
                     })
                     .orElse(null);
@@ -140,6 +158,7 @@ public class MovementServiceImpl implements MovementService {
         productRepository.save(product);
 
         IdempotencyContext.Scope scope = IdempotencyContext.get();
+        UUID idempotencyRecordId = (scope != null) ? scope.recordId() : null;
         String idempotencyKey = (scope != null) ? scope.key() : null;
 
         StockMovement movement = StockMovement.builder()
@@ -150,6 +169,7 @@ public class MovementServiceImpl implements MovementService {
                 .afterQuantity(after)
                 .reason(reason)
                 .performedBy(username)
+                .idempotencyRecordId(idempotencyRecordId)
                 .idempotencyKey(idempotencyKey)
                 .build();
 
