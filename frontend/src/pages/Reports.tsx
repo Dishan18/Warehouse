@@ -46,12 +46,20 @@ import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { downloadBlob } from '@/utils/download'
 import { reportsApi, type DateRange } from '@/api/reports'
+import { settingsApi } from '@/api/settingsApi'
 import { format } from 'date-fns'
 
 const COLORS = ['#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16']
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value)
+function formatCurrency(value: number, currencyCode: string = 'USD'): string {
+  try {
+    return new Intl.NumberFormat(currencyCode === 'INR' ? 'en-IN' : 'en-US', {
+      style: 'currency',
+      currency: currencyCode,
+    }).format(value)
+  } catch {
+    return `${currencyCode} ${Number(value || 0).toFixed(2)}`
+  }
 }
 
 function formatNumber(value: number): string {
@@ -184,6 +192,13 @@ export default function Reports() {
     queryFn: async () => (await reportsApi.getInventoryReport(dateRange)).data,
   })
 
+  const { data: settings } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => settingsApi.get(),
+  })
+  const currencyCode = settings?.currency || 'USD'
+  const fmtCurrency = (val: number) => formatCurrency(val, currencyCode)
+
   const handleExportPdf = async () => {
     if (!report) return
 
@@ -213,7 +228,7 @@ export default function Reports() {
       ['Total Suppliers', formatNumber(report.totalSuppliers)],
       ['Low Stock Products', formatNumber(report.lowStockProducts)],
       ['Out of Stock Products', formatNumber(report.outOfStockProducts)],
-      ['Total Inventory Value', formatCurrency(report.totalInventoryValue)],
+      ['Total Inventory Value', fmtCurrency(report.totalInventoryValue)],
     ]
 
     autoTable(pdf, {
@@ -236,7 +251,7 @@ export default function Reports() {
       body: report.productsByCategory.map((item) => [
         item.category,
         formatNumber(item.count),
-        formatCurrency(item.value),
+        fmtCurrency(item.value),
       ]),
       theme: 'striped',
       headStyles: { fillColor: [14, 165, 233] },
@@ -396,7 +411,7 @@ export default function Reports() {
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
             label="Inventory Value"
-            value={formatCurrency(report.totalInventoryValue)}
+            value={fmtCurrency(report.totalInventoryValue)}
             icon={<PaidOutlinedIcon />}
             color="#059669"
           />
@@ -438,10 +453,10 @@ export default function Reports() {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={report.productsByCategory} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis type="number" tickFormatter={formatCurrency} />
+                <XAxis type="number" tickFormatter={fmtCurrency} />
                 <YAxis type="category" dataKey="category" width={120} />
                 <Tooltip
-                  formatter={(value) => [formatCurrency(Number(value ?? 0)), 'Value']}
+                  formatter={(value) => [fmtCurrency(Number(value ?? 0)), 'Value']}
                   labelFormatter={(label) => String(label ?? '')}
                 />
                 <Legend />
@@ -556,7 +571,7 @@ export default function Reports() {
                     <TableCell sx={{ fontWeight: 600 }}>{supplier.supplier}</TableCell>
                     <TableCell align="right">{formatNumber(supplier.products)}</TableCell>
                     <TableCell align="right" sx={{ fontWeight: 600 }}>
-                      {formatCurrency(supplier.totalValue)}
+                      {fmtCurrency(supplier.totalValue)}
                     </TableCell>
                   </TableRow>
                 ))}

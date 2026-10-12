@@ -21,6 +21,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import { productApi } from '../api/productApi'
 import { categoryApi } from '../api/categoryApi'
 import { reportApi } from '../api/reportApi'
+import { settingsApi } from '../api/settingsApi'
 import { downloadBlob } from '../utils/download'
 import type { Category, Product, ProductRequest, ProductStatus } from '../types'
 import DataTable, { type Column } from '../components/common/DataTable'
@@ -37,6 +38,7 @@ const STATUS_CONFIG: Record<ProductStatus, { label: string; color: 'success' | '
 const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
 
 export default function Products() {
+  const [currencyCode, setCurrencyCode] = useState('USD')
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebounce(search)
   const [categoryFilter, setCategoryFilter] = useState('')
@@ -45,6 +47,10 @@ export default function Products() {
   const [size, setSize] = useState(10)
   const [sortBy, setSortBy] = useState('name')
   const [direction, setDirection] = useState<'asc' | 'desc'>('asc')
+
+  useEffect(() => {
+    settingsApi.get().then((s) => setCurrencyCode(s.currency)).catch(() => {})
+  }, [])
 
   const [categories, setCategories] = useState<Category[]>([])
   const [rows, setRows] = useState<Product[]>([])
@@ -154,7 +160,16 @@ export default function Products() {
       id: 'price',
       label: 'Price',
       align: 'right',
-      render: (row) => currency.format(row.price),
+      render: (row) => {
+        try {
+          return new Intl.NumberFormat(currencyCode === 'INR' ? 'en-IN' : 'en-US', {
+            style: 'currency',
+            currency: currencyCode,
+          }).format(row.price)
+        } catch {
+          return `${currencyCode} ${Number(row.price || 0).toFixed(2)}`
+        }
+      },
     },
     { id: 'quantity', label: 'Qty', align: 'right', render: (row) => row.quantity },
     {

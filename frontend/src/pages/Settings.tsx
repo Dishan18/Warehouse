@@ -41,7 +41,7 @@ const settingsSchema = z.object({
 type SettingsFormInput = z.input<typeof settingsSchema>
 type SettingsFormValues = z.output<typeof settingsSchema>
 
-const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'MAD', 'TND', 'CHF']
+const CURRENCIES = ['USD', 'EUR', 'GBP', 'INR', 'JPY', 'CAD', 'AUD', 'MAD', 'TND', 'CHF']
 
 export default function Settings() {
   const [loading, setLoading] = useState(true)

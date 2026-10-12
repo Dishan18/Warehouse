@@ -10,6 +10,8 @@ import org.springframework.data.jpa.repository.Query;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.data.repository.query.Param;
+
 public interface StockMovementRepository
         extends JpaRepository<StockMovement, UUID>, JpaSpecificationExecutor<StockMovement> {
 
@@ -28,13 +30,14 @@ public interface StockMovementRepository
     @Query("""
             SELECT m.product.name AS name, COUNT(m.id) AS movementCount
             FROM StockMovement m
-            WHERE (:from IS NULL OR m.createdAt >= :from)
-              AND (:to IS NULL OR m.createdAt <= :to)
+            WHERE m.createdAt BETWEEN :from AND :to
             GROUP BY m.product.id, m.product.name
             ORDER BY COUNT(m.id) DESC
             """)
     List<TopProductProjection> findTopProductsByMovement(
-            java.time.LocalDateTime from, java.time.LocalDateTime to, Pageable pageable);
+            @Param("from") java.time.LocalDateTime from,
+            @Param("to") java.time.LocalDateTime to,
+            Pageable pageable);
 
     interface TopProductProjection {
         String getName();

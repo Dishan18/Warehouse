@@ -12,10 +12,12 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import lombok.extern.slf4j.Slf4j;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
+@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -118,8 +120,9 @@ public class GlobalExceptionHandler {
             Exception ex,
             HttpServletRequest request) {
 
+        log.error("Unhandled exception processing request to {}: ", request.getRequestURI(), ex);
         return build(HttpStatus.INTERNAL_SERVER_ERROR,
-                "An unexpected error occurred", request);
+                ex.getMessage() != null ? ex.getMessage() : "An unexpected error occurred", request);
     }
 
     private ResponseEntity<ApiError> build(
