@@ -1,5 +1,6 @@
 package com.dishan.warehouse.idempotency.filter;
 
+import com.dishan.warehouse.idempotency.IdempotencyContext;
 import com.dishan.warehouse.idempotency.entity.IdempotencyRecord;
 import com.dishan.warehouse.idempotency.exception.IdempotencyConflictException;
 import com.dishan.warehouse.idempotency.exception.IdempotencyInProgressException;
@@ -76,7 +77,10 @@ public class IdempotencyFilter extends OncePerRequestFilter {
                 return;
             }
 
-            // Newly reserved: proceed through downstream chain and capture output
+            // Newly reserved: establish idempotency context for downstream services in the transaction
+            IdempotencyContext.set(userId, httpMethod, requestUri, key);
+
+            // Proceed through downstream chain and capture output
             ContentCachingResponseWrapper responseWrapper = new ContentCachingResponseWrapper(response);
             try {
                 filterChain.doFilter(cachedRequest, responseWrapper);
@@ -111,6 +115,8 @@ public class IdempotencyFilter extends OncePerRequestFilter {
                             .getBytes(StandardCharsets.UTF_8)
             );
             response.flushBuffer();
+        } finally {
+            IdempotencyContext.clear();
         }
     }
 

@@ -56,6 +56,7 @@ class IdempotencyPostgresConcurrencyIT {
         String userId = "operator@warehouse.com";
         String method = "POST";
         String uri = "/api/movements/outbound";
+        String payloadHash = "consistent-payload-hash";
 
         // Seed expired IN_FLIGHT record directly in DB
         IdempotencyRecord expiredRecord = IdempotencyRecord.builder()
@@ -63,7 +64,7 @@ class IdempotencyPostgresConcurrencyIT {
                 .httpMethod(method)
                 .requestUri(uri)
                 .idempotencyKey(key)
-                .requestHash("stale-hash")
+                .requestHash(payloadHash)
                 .status(IdempotencyStatus.IN_FLIGHT)
                 .createdAt(LocalDateTime.now().minusHours(2))
                 .expiresAt(LocalDateTime.now().minusMinutes(10))
@@ -80,13 +81,12 @@ class IdempotencyPostgresConcurrencyIT {
         List<Future<?>> futures = new ArrayList<>();
 
         for (int i = 0; i < threadCount; i++) {
-            final String threadHash = "hash-thread-" + i;
             futures.add(executor.submit(() -> {
                 readyLatch.countDown();
                 try {
                     startLatch.await();
                     IdempotencyRecord record = idempotencyService.processOrReserve(
-                            userId, method, uri, key, threadHash
+                            userId, method, uri, key, payloadHash
                     );
                     if (record == null) {
                         // Recovered slot and reserved to proceed
@@ -113,10 +113,10 @@ class IdempotencyPostgresConcurrencyIT {
         // All other concurrent attempts must have been rejected as in-progress
         assertThat(inProgressBlockedCount.get()).isEqualTo(threadCount - 1);
 
-        // Verify the database record has been renewed
+        // Verify the database record has been renewed with short in-flight lease
         IdempotencyRecord updated = idempotencyRepository.findForUpdate(userId, method, uri, key).orElseThrow();
         assertThat(updated.getStatus()).isEqualTo(IdempotencyStatus.IN_FLIGHT);
-        assertThat(updated.getExpiresAt()).isAfter(LocalDateTime.now().plusHours(23));
+        assertThat(updated.getExpiresAt()).isAfter(LocalDateTime.now().plusSeconds(60));
     }
 
     @Test
@@ -126,6 +126,7 @@ class IdempotencyPostgresConcurrencyIT {
         String userId = "operator@warehouse.com";
         String method = "POST";
         String uri = "/api/movements/outbound";
+        String payloadHash = "original-failed-hash";
 
         // Seed FAILED record directly in DB
         IdempotencyRecord failedRecord = IdempotencyRecord.builder()
@@ -133,7 +134,7 @@ class IdempotencyPostgresConcurrencyIT {
                 .httpMethod(method)
                 .requestUri(uri)
                 .idempotencyKey(key)
-                .requestHash("original-failed-hash")
+                .requestHash(payloadHash)
                 .status(IdempotencyStatus.FAILED)
                 .createdAt(LocalDateTime.now().minusMinutes(5))
                 .expiresAt(LocalDateTime.now().plusHours(23))
@@ -150,13 +151,12 @@ class IdempotencyPostgresConcurrencyIT {
         List<Future<?>> futures = new ArrayList<>();
 
         for (int i = 0; i < threadCount; i++) {
-            final String threadHash = "retry-hash-" + i;
             futures.add(executor.submit(() -> {
                 readyLatch.countDown();
                 try {
                     startLatch.await();
                     IdempotencyRecord record = idempotencyService.processOrReserve(
-                            userId, method, uri, key, threadHash
+                            userId, method, uri, key, payloadHash
                     );
                     if (record == null) {
                         successProceedCount.incrementAndGet();
@@ -184,6 +184,7 @@ class IdempotencyPostgresConcurrencyIT {
         // Record should now be IN_FLIGHT
         IdempotencyRecord updated = idempotencyRepository.findForUpdate(userId, method, uri, key).orElseThrow();
         assertThat(updated.getStatus()).isEqualTo(IdempotencyStatus.IN_FLIGHT);
+        assertThat(updated.getExpiresAt()).isAfter(LocalDateTime.now().plusSeconds(60));
     }
 
     @Test

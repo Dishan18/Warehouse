@@ -7,6 +7,7 @@ import com.dishan.warehouse.entity.Product;
 import com.dishan.warehouse.entity.StockMovement;
 import com.dishan.warehouse.exception.InsufficientStockException;
 import com.dishan.warehouse.exception.ResourceNotFoundException;
+import com.dishan.warehouse.idempotency.IdempotencyContext;
 import com.dishan.warehouse.movement.dto.MovementRequest;
 import com.dishan.warehouse.movement.dto.MovementResponse;
 import com.dishan.warehouse.movement.mapper.MovementMapper;
@@ -47,6 +48,10 @@ public class MovementServiceImpl implements MovementService {
     @Override
     @Transactional
     public MovementResponse inbound(MovementRequest request, String username) {
+        MovementResponse replayed = checkCommittedIdempotentMovement();
+        if (replayed != null) {
+            return replayed;
+        }
 
         requirePositiveQuantity(request.getQuantity());
         // PESSIMISTIC_WRITE lock: ensures concurrent inbound updates serialize and prevent lost updates
@@ -62,6 +67,10 @@ public class MovementServiceImpl implements MovementService {
     @Override
     @Transactional
     public MovementResponse outbound(MovementRequest request, String username) {
+        MovementResponse replayed = checkCommittedIdempotentMovement();
+        if (replayed != null) {
+            return replayed;
+        }
 
         requirePositiveQuantity(request.getQuantity());
         // PESSIMISTIC_WRITE lock: blocks concurrent transactions from reading a stale
@@ -84,6 +93,10 @@ public class MovementServiceImpl implements MovementService {
     @Override
     @Transactional
     public MovementResponse adjust(MovementRequest request, String username) {
+        MovementResponse replayed = checkCommittedIdempotentMovement();
+        if (replayed != null) {
+            return replayed;
+        }
 
         // PESSIMISTIC_WRITE lock: ensures the before-quantity we snapshot is the
         // authoritative committed value, not a dirty read from a concurrent transaction.
@@ -94,6 +107,20 @@ public class MovementServiceImpl implements MovementService {
 
         return register(product, MovementType.ADJUSTMENT, newTotal,
                 before, newTotal, request.getReason(), username);
+    }
+
+    private MovementResponse checkCommittedIdempotentMovement() {
+        IdempotencyContext.Scope scope = IdempotencyContext.get();
+        if (scope != null && scope.key() != null && !scope.key().isBlank()) {
+            return movementRepository.findByIdempotencyKey(scope.key())
+                    .map(committed -> {
+                        log.info("Idempotent replay: found committed movement for key '{}', returning without re-executing stock mutation",
+                                scope.key());
+                        return movementMapper.toResponse(committed);
+                    })
+                    .orElse(null);
+        }
+        return null;
     }
 
     @Override
@@ -112,6 +139,9 @@ public class MovementServiceImpl implements MovementService {
         product.setQuantity(after);
         productRepository.save(product);
 
+        IdempotencyContext.Scope scope = IdempotencyContext.get();
+        String idempotencyKey = (scope != null) ? scope.key() : null;
+
         StockMovement movement = StockMovement.builder()
                 .product(product)
                 .type(type)
@@ -120,6 +150,7 @@ public class MovementServiceImpl implements MovementService {
                 .afterQuantity(after)
                 .reason(reason)
                 .performedBy(username)
+                .idempotencyKey(idempotencyKey)
                 .build();
 
         StockMovement saved = movementRepository.save(movement);

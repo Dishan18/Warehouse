@@ -25,7 +25,7 @@ public class DataInitializer implements CommandLineRunner {
     @Value("${application.admin.email:admin@smartwarehouse.com}")
     private String adminEmail;
 
-    @Value("${application.admin.password:Admin@123}")
+    @Value("${application.admin.password}")
     private String adminPassword;
 
     @Value("${application.seed-default-admin:true}")

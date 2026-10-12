@@ -44,12 +44,14 @@ public class IdempotencyService {
         if (existingOpt.isPresent()) {
             IdempotencyRecord existing = existingOpt.get();
 
+            // Reject payload mismatch across all states (COMPLETED, IN_FLIGHT, FAILED)
+            if (!existing.getRequestHash().equals(requestHash)) {
+                log.warn("Idempotency key '{}' for user '{}' on {} {} reused with different request hash",
+                        key, userId, httpMethod, requestUri);
+                throw new IdempotencyConflictException("Idempotency key reused with different request payload");
+            }
+
             if (existing.getStatus() == IdempotencyStatus.COMPLETED) {
-                if (!existing.getRequestHash().equals(requestHash)) {
-                    log.warn("Idempotency key '{}' for user '{}' on {} {} reused with different request hash",
-                            key, userId, httpMethod, requestUri);
-                    throw new IdempotencyConflictException("Idempotency key reused with different request payload");
-                }
                 log.info("Idempotency key '{}' matched existing completed record, replaying response", key);
                 return existing;
             }
@@ -58,8 +60,7 @@ public class IdempotencyService {
                 // If it's expired in-flight (e.g. previous worker crashed), allow recovery under row lock
                 if (existing.getExpiresAt().isBefore(LocalDateTime.now())) {
                     log.info("Idempotency key '{}' had expired IN_FLIGHT state, re-claiming slot under lock", key);
-                    existing.setRequestHash(requestHash);
-                    existing.setExpiresAt(LocalDateTime.now().plusHours(24));
+                    existing.setExpiresAt(LocalDateTime.now().plusMinutes(2));
                     repository.saveAndFlush(existing);
                     return null;
                 }
@@ -71,14 +72,13 @@ public class IdempotencyService {
                 // Previous attempt failed, allow retry under row lock
                 log.info("Idempotency key '{}' had FAILED state, re-claiming slot for retry under lock", key);
                 existing.setStatus(IdempotencyStatus.IN_FLIGHT);
-                existing.setRequestHash(requestHash);
-                existing.setExpiresAt(LocalDateTime.now().plusHours(24));
+                existing.setExpiresAt(LocalDateTime.now().plusMinutes(2));
                 repository.saveAndFlush(existing);
                 return null;
             }
         }
 
-        // New key: reserve slot as IN_FLIGHT
+        // New key: reserve slot as IN_FLIGHT with a short lease (2 minutes)
         try {
             IdempotencyRecord record = IdempotencyRecord.builder()
                     .userId(userId)
@@ -88,7 +88,7 @@ public class IdempotencyService {
                     .requestHash(requestHash)
                     .status(IdempotencyStatus.IN_FLIGHT)
                     .createdAt(LocalDateTime.now())
-                    .expiresAt(LocalDateTime.now().plusHours(24))
+                    .expiresAt(LocalDateTime.now().plusMinutes(2))
                     .build();
             repository.saveAndFlush(record);
             return null;
@@ -105,6 +105,7 @@ public class IdempotencyService {
             record.setStatus(IdempotencyStatus.COMPLETED);
             record.setResponseStatus(responseStatus);
             record.setResponseBody(responseBody);
+            record.setExpiresAt(LocalDateTime.now().plusHours(24));
             repository.saveAndFlush(record);
             log.debug("Marked idempotency key '{}' as COMPLETED with status {}", key, responseStatus);
         });
@@ -114,6 +115,7 @@ public class IdempotencyService {
     public void fail(String userId, String httpMethod, String requestUri, String key) {
         repository.findForUpdate(userId, httpMethod, requestUri, key).ifPresent(record -> {
             record.setStatus(IdempotencyStatus.FAILED);
+            record.setExpiresAt(LocalDateTime.now().plusHours(24));
             repository.saveAndFlush(record);
             log.debug("Marked idempotency key '{}' as FAILED", key);
         });

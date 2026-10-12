@@ -23,9 +23,12 @@ import java.math.BigDecimal;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.dishan.warehouse.idempotency.IdempotencyContext;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -158,5 +161,71 @@ class MovementServiceImplTest {
         when(productRepository.findByIdForUpdate(product.getId())).thenReturn(Optional.empty());
 
         assertThrows(ResourceNotFoundException.class, () -> movementService.outbound(request, "admin@test.com"));
+    }
+
+    @Test
+    void outbound_whenIdempotencyKeyAlreadyCommitted_replaysWithoutMutatingStock() {
+        String idempotencyKey = "idem-replay-key";
+        IdempotencyContext.set("admin", "POST", "/api/movements/outbound", idempotencyKey);
+
+        try {
+            StockMovement committedMovement = StockMovement.builder()
+                    .id(UUID.randomUUID())
+                    .product(product)
+                    .type(MovementType.OUTBOUND)
+                    .quantity(5)
+                    .beforeQuantity(10)
+                    .afterQuantity(5)
+                    .performedBy("admin@test.com")
+                    .idempotencyKey(idempotencyKey)
+                    .build();
+
+            MovementResponse expectedResponse = MovementResponse.builder()
+                    .id(committedMovement.getId())
+                    .productId(product.getId())
+                    .type(MovementType.OUTBOUND)
+                    .quantity(5)
+                    .beforeQuantity(10)
+                    .afterQuantity(5)
+                    .build();
+
+            when(movementRepository.findByIdempotencyKey(idempotencyKey)).thenReturn(Optional.of(committedMovement));
+            when(movementMapper.toResponse(committedMovement)).thenReturn(expectedResponse);
+
+            MovementResponse response = movementService.outbound(request, "admin@test.com");
+
+            assertNotNull(response);
+            assertEquals(expectedResponse.getId(), response.getId());
+            // Product lock and update should NEVER be called on replay
+            verify(productRepository, never()).findByIdForUpdate(any());
+            verify(productRepository, never()).save(any());
+            verify(movementRepository, never()).save(any());
+        } finally {
+            IdempotencyContext.clear();
+        }
+    }
+
+    @Test
+    void inbound_withIdempotencyContext_persistsIdempotencyKeyOnStockMovement() {
+        String idempotencyKey = "idem-inbound-key";
+        IdempotencyContext.set("admin", "POST", "/api/movements/inbound", idempotencyKey);
+
+        try {
+            when(movementRepository.findByIdempotencyKey(idempotencyKey)).thenReturn(Optional.empty());
+            when(productRepository.findByIdForUpdate(product.getId())).thenReturn(Optional.of(product));
+            when(movementRepository.save(any(StockMovement.class)))
+                    .thenAnswer(invocation -> invocation.getArgument(0));
+            when(movementMapper.toResponse(any(StockMovement.class))).thenReturn(MovementResponse.builder().build());
+
+            movementService.inbound(request, "admin@test.com");
+
+            ArgumentCaptor<StockMovement> captor = ArgumentCaptor.forClass(StockMovement.class);
+            verify(movementRepository).save(captor.capture());
+
+            StockMovement savedMovement = captor.getValue();
+            assertEquals(idempotencyKey, savedMovement.getIdempotencyKey());
+        } finally {
+            IdempotencyContext.clear();
+        }
     }
 }

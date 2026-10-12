@@ -120,13 +120,13 @@ class IdempotencyServiceTest {
     }
 
     @Test
-    void processOrReserve_whenInFlightExpired_allowsRecoveryUnderLock() {
+    void processOrReserve_whenInFlightExpiredAndHashMatches_allowsRecoveryUnderLock() {
         IdempotencyRecord expiredInFlight = IdempotencyRecord.builder()
                 .userId(userId)
                 .httpMethod(httpMethod)
                 .requestUri(requestUri)
                 .idempotencyKey(key)
-                .requestHash("old-hash")
+                .requestHash(hash)
                 .status(IdempotencyStatus.IN_FLIGHT)
                 .expiresAt(LocalDateTime.now().minusMinutes(5))
                 .build();
@@ -142,13 +142,32 @@ class IdempotencyServiceTest {
     }
 
     @Test
-    void processOrReserve_whenFailedState_allowsRecoveryUnderLock() {
+    void processOrReserve_whenInFlightExpiredAndHashDiffers_throwsConflict() {
+        IdempotencyRecord expiredInFlight = IdempotencyRecord.builder()
+                .userId(userId)
+                .httpMethod(httpMethod)
+                .requestUri(requestUri)
+                .idempotencyKey(key)
+                .requestHash("previous-hash")
+                .status(IdempotencyStatus.IN_FLIGHT)
+                .expiresAt(LocalDateTime.now().minusMinutes(5))
+                .build();
+
+        when(repository.findForUpdate(userId, httpMethod, requestUri, key)).thenReturn(Optional.of(expiredInFlight));
+
+        assertThrows(IdempotencyConflictException.class, () ->
+                service.processOrReserve(userId, httpMethod, requestUri, key, hash));
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void processOrReserve_whenFailedStateAndHashMatches_allowsRecoveryUnderLock() {
         IdempotencyRecord failedRecord = IdempotencyRecord.builder()
                 .userId(userId)
                 .httpMethod(httpMethod)
                 .requestUri(requestUri)
                 .idempotencyKey(key)
-                .requestHash("failed-attempt-hash")
+                .requestHash(hash)
                 .status(IdempotencyStatus.FAILED)
                 .expiresAt(LocalDateTime.now().plusHours(1))
                 .build();
@@ -162,6 +181,25 @@ class IdempotencyServiceTest {
         assertEquals(IdempotencyStatus.IN_FLIGHT, failedRecord.getStatus());
         assertEquals(hash, failedRecord.getRequestHash());
         assertTrue(failedRecord.getExpiresAt().isAfter(LocalDateTime.now()));
+    }
+
+    @Test
+    void processOrReserve_whenFailedStateAndHashDiffers_throwsConflict() {
+        IdempotencyRecord failedRecord = IdempotencyRecord.builder()
+                .userId(userId)
+                .httpMethod(httpMethod)
+                .requestUri(requestUri)
+                .idempotencyKey(key)
+                .requestHash("previous-hash")
+                .status(IdempotencyStatus.FAILED)
+                .expiresAt(LocalDateTime.now().plusHours(1))
+                .build();
+
+        when(repository.findForUpdate(userId, httpMethod, requestUri, key)).thenReturn(Optional.of(failedRecord));
+
+        assertThrows(IdempotencyConflictException.class, () ->
+                service.processOrReserve(userId, httpMethod, requestUri, key, hash));
+        verify(repository, never()).saveAndFlush(any());
     }
 
     @Test
