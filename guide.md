@@ -189,6 +189,121 @@ Write-Host "8. Low Stock Transition: Quantity: $($finalProd.quantity) (MinStock:
 
 ---
 
+### Step 3C: Pipeline Architecture, Inputs, Outputs & Internal Mechanisms
+
+Here is an in-depth breakdown of each operation executed by the automated test flow:
+
+#### 1. Administrator Authentication
+- **Endpoint**: `POST /api/auth/login`
+- **Inputs**:
+  - `email`: `"admin@warehouse.com"` (Administrator identity).
+  - `password`: `"Admin@123"` (Configured via `ADMIN_PASSWORD` environment variable).
+- **Outputs**:
+  - `accessToken`: Cryptographic Bearer token (`eyJhbGciOiJIUzM4NCJ9...`).
+  - `tokenType`: `"Bearer"`.
+  - `roles`: `["ADMIN"]`.
+- **Internal Pipeline**:
+  - Spring Security delegates to `DaoAuthenticationProvider` and `CustomUserDetailsService`.
+  - BCrypt verifies the password hash against the seeded `users` table record.
+  - `JwtService` issues a stateless HMAC-SHA384 token carrying user claims, issued timestamp, and 24-hour expiration (`86400000 ms`).
+
+#### 2. Category Lookup / Reuse
+- **Endpoint**: `GET /api/categories` or `POST /api/categories`
+- **Inputs**:
+  - Header `Authorization`: `"Bearer <TOKEN>"`.
+  - Body (if creating): `{"name": "...", "description": "...", "active": true}`.
+- **Outputs**:
+  - `id`: Category UUID primary key.
+  - `name`: Category label.
+- **Internal Pipeline**:
+  - Authenticated request passes through `JwtAuthenticationFilter`.
+  - Checks existing catalog to prevent violating the database unique constraint (`UNIQUE (name)`). Reuses an existing category if already present.
+
+#### 3. Supplier Lookup / Reuse
+- **Endpoint**: `GET /api/suppliers` or `POST /api/suppliers`
+- **Inputs**:
+  - Header `Authorization`: `"Bearer <TOKEN>"`.
+  - Body (if creating): Supplier company name, contact person, email, and phone.
+- **Outputs**:
+  - `id`: Supplier UUID primary key.
+- **Internal Pipeline**:
+  - Manages supplier registry in PostgreSQL. Ensures foreign keys exist before catalog items are registered.
+
+#### 4. Product Registration
+- **Endpoint**: `POST /api/products`
+- **Inputs**:
+  - `sku`: Unique Stock Keeping Unit string (e.g. `SKU-AUTO-1087`).
+  - `name`: Item display name.
+  - `price`: Unit price (`19.99`).
+  - `quantity`: Initial available inventory count (`10`).
+  - `minStock`: Low-stock alert threshold (`3`).
+  - `categoryId` & `supplierId`: Foreign key UUIDs linked to Category and Supplier.
+- **Outputs**:
+  - `id`: Product UUID.
+  - `status`: `"IN_STOCK"`.
+  - `quantity`: `10`.
+- **Internal Pipeline**:
+  - Verifies foreign key references.
+  - Computes status dynamically: since `quantity (10) > minStock (3)`, sets status to `IN_STOCK`.
+
+#### 5. Concurrency-Safe Outbound Stock Movement
+- **Endpoint**: `POST /api/movements/outbound`
+- **Inputs**:
+  - Header `X-Idempotency-Key`: Client-generated idempotency identifier (e.g. `idem-key-1087`).
+  - Body: `{"productId": "<UUID>", "quantity": 4, "reason": "Deduction Test"}`.
+- **Outputs**:
+  - `type`: `"OUTBOUND"`.
+  - `beforeQuantity`: `10`.
+  - `afterQuantity`: `6`.
+  - `performedBy`: `"admin@warehouse.com"`.
+- **Internal Pipeline**:
+  1. **Idempotency Filter**: `IdempotencyFilter` intercepts the request, wraps the input stream in `CachedBodyHttpServletRequest`, and calculates the SHA-256 payload hash.
+  2. **Scoped Reservation**: Inserts a row in `idempotency_records` with status `IN_FLIGHT` scoped by `(user_id, http_method, request_uri, idempotency_key)`.
+  3. **Pessimistic Row Locking**: `MovementServiceImpl` executes `productRepository.findByIdWithLock(productId)` (`SELECT ... FOR UPDATE`), obtaining an exclusive row-level lock in PostgreSQL to eliminate concurrency races.
+  4. **Balance Deduction**: Deducts 4 units (10 - 4 = 6).
+  5. **Movement Ledger**: Creates an immutable record in `stock_movements` linked to `idempotency_record_id`.
+  6. **Cache Completion**: Flips idempotency status to `COMPLETED` and caches the HTTP response body.
+
+#### 6. Idempotent Request Replay
+- **Endpoint**: `POST /api/movements/outbound`
+- **Inputs**:
+  - Identical request payload and identical header `X-Idempotency-Key: idem-key-1087`.
+- **Outputs**:
+  - Returns the exact cached response body with `afterQuantity: 6`.
+  - Querying `GET /api/products/{id}` confirms inventory balance remains **6** (not 2).
+- **Internal Pipeline**:
+  - `IdempotencyService` detects that the key is already marked `COMPLETED` for this user and endpoint.
+  - It replays the cached 200 OK response immediately.
+  - Zero stock calculations, zero database locks, and zero duplicate deductions occur.
+
+#### 7. Key Tamper & Conflict Detection
+- **Endpoint**: `POST /api/movements/outbound`
+- **Inputs**:
+  - Same header `X-Idempotency-Key: idem-key-1087`.
+  - Mismatched payload: `{"productId": "...", "quantity": 2}`.
+- **Outputs**:
+  - HTTP `422 Unprocessable Entity`.
+  - Error: `"Idempotency key reused with different request payload"`.
+- **Internal Pipeline**:
+  - `IdempotencyService` recalculates the SHA-256 hash of the incoming request body and compares it against the stored hash in `idempotency_records`.
+  - Mismatched hashes trigger an immediate 422 rejection, protecting the application against key spoofing and parameter confusion.
+
+#### 8. Low-Stock Automatic Transition & Alert Event
+- **Endpoint**: `POST /api/movements/outbound`
+- **Inputs**:
+  - New key `low-stock-1087`, deducting 4 more units (`6 - 4 = 2`).
+- **Outputs**:
+  - `quantity`: `2`.
+  - `minStock`: `3`.
+  - `status`: `"LOW_STOCK"`.
+- **Internal Pipeline**:
+  - Remaining stock (2) drops below the threshold `minStock` (3).
+  - The entity updates its status to `LOW_STOCK`.
+  - The service publishes a `StockLevelChangedEvent`.
+  - `@TransactionalEventListener(phase = AFTER_COMMIT)` executes `StockAlertEventListener`, sending a real-time STOMP JSON notification frame over WebSocket topic `/topic/stock-alerts`.
+
+---
+
 ### Step 4: Create Category & Supplier (Individual cURL Steps)
 Create a Category:
 ```bash
