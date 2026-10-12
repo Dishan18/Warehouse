@@ -40,6 +40,8 @@ public class DataInitializer implements CommandLineRunner {
 
         if (seedDefaultAdmin) {
             createDefaultAdmin();
+            createDemoUser("Marcus", "Vance", "manager@warehouse.com", "Manager@123", "MANAGER");
+            createDemoUser("Emma", "Hayes", "employee@warehouse.com", "Employee@123", "EMPLOYEE");
         }
 
     }
@@ -77,6 +79,27 @@ public class DataInitializer implements CommandLineRunner {
                 .build();
 
         userRepository.save(admin);
+
+    }
+
+    private void createDemoUser(String firstName, String lastName, String email, String rawPassword, String roleName) {
+
+        if (userRepository.existsByEmail(email)) {
+            return;
+        }
+
+        Role role = roleRepository.findByName(roleName)
+                .orElseThrow(() -> new IllegalStateException(roleName + " role not found"));
+
+        User user = User.builder()
+                .firstName(firstName)
+                .lastName(lastName)
+                .email(email)
+                .password(passwordEncoder.encode(rawPassword))
+                .roles(Set.of(role))
+                .build();
+
+        userRepository.save(user);
 
     }
 
