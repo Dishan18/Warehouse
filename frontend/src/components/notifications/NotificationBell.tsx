@@ -61,12 +61,17 @@ export default function NotificationBell() {
     }
   }, [])
 
-  useNotificationSocket((notification) => {
-    setNotifications((prev) => [notification, ...prev.filter((n) => n.id !== notification.id)])
-    if (!notification.read) {
-      setUnreadCount((prev) => prev + 1)
+  useNotificationSocket(
+    (notification) => {
+      setNotifications((prev) => [notification, ...prev.filter((n) => n.id !== notification.id)])
+      if (!notification.read) {
+        setUnreadCount((prev) => prev + 1)
+      }
+    },
+    (stockAlert) => {
+      setAlerts((prev) => [stockAlert, ...prev.filter((a) => a.productId !== stockAlert.productId)])
     }
-  })
+  )
 
   useEffect(() => {
     refresh()
@@ -115,7 +120,7 @@ export default function NotificationBell() {
     }
   }
 
-  const badgeCount = unreadCount
+  const badgeCount = unreadCount + alerts.length
 
   return (
     <>

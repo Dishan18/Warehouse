@@ -38,8 +38,15 @@ public class StockAlertEventListener {
                 .map(AppSettings::getLowStockThreshold)
                 .orElse(-1);
 
-        if (threshold < 0 || event.afterQuantity() > threshold) {
-            return; // notifications disabled or stock is healthy
+        if (threshold < 0) {
+            return; // notifications disabled
+        }
+
+        boolean isLowStock = event.afterQuantity() <= event.minStock()
+                || (threshold >= 0 && event.afterQuantity() <= threshold);
+
+        if (!isLowStock) {
+            return; // stock is healthy
         }
 
         String alertType = event.afterQuantity() == 0 ? "OUT_OF_STOCK" : "LOW_STOCK";

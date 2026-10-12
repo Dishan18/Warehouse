@@ -143,6 +143,9 @@ public class NotificationServiceImpl implements NotificationService {
     public List<StockAlertResponse> getAlerts() {
 
         int threshold = currentThreshold();
+        if (threshold < 0) {
+            return List.of();
+        }
 
         return productRepository
                 .findProductsAtOrBelowThreshold(threshold, PageRequest.of(0, MAX_ALERTS))
@@ -155,7 +158,12 @@ public class NotificationServiceImpl implements NotificationService {
     @Transactional(readOnly = true)
     public long getAlertCount() {
 
-        return productRepository.countProductsAtOrBelowThreshold(currentThreshold());
+        int threshold = currentThreshold();
+        if (threshold < 0) {
+            return 0;
+        }
+
+        return productRepository.countProductsAtOrBelowThreshold(threshold);
     }
 
     private User findUserByEmail(String email) {
