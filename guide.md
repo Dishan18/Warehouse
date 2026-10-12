@@ -5,18 +5,22 @@
 Follow these exact steps to boot the application and verify all features against the live **Supabase PostgreSQL** cloud database.
 
 ### Step 1: Launch Spring Boot Backend
-Configure your administrator password (and optionally your database credentials) in the environment, then start the server:
+Configure your database password, JWT secret, and administrator password in your environment, then start the server:
 
 In PowerShell:
 ```powershell
 $env:ADMIN_PASSWORD = "Admin@123"
-.\mvnw.cmd spring-boot:run -Dspring-boot.run.profiles=dev
+$env:JWT_SECRET = "404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970"
+$env:DB_PASSWORD = "your_supabase_database_password"
+.\mvnw.cmd spring-boot:run
 ```
 
 In Linux / macOS Bash:
 ```bash
 export ADMIN_PASSWORD="Admin@123"
-./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
+export JWT_SECRET="404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970"
+export DB_PASSWORD="your_supabase_database_password"
+./mvnw spring-boot:run
 ```
 
 Wait for the console banner:

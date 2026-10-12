@@ -65,16 +65,20 @@ cd Warehouse
 ```
 
 ### 2. Configure Environment Variables
-Set the database password via an environment variable prior to starting the application:
+Set the required environment variables prior to starting the application:
 
 On Linux / macOS:
 ```bash
 export DB_PASSWORD="your_supabase_database_password"
+export JWT_SECRET="404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970"
+export ADMIN_PASSWORD="your_admin_password"
 ```
 
 On Windows (PowerShell):
 ```powershell
 $env:DB_PASSWORD = "your_supabase_database_password"
+$env:JWT_SECRET = "404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970"
+$env:ADMIN_PASSWORD = "your_admin_password"
 ```
 
 See `.env.example` for all configurable environment variables (`DB_URL`, `DB_USERNAME`, `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`).
@@ -82,12 +86,12 @@ See `.env.example` for all configurable environment variables (`DB_URL`, `DB_USE
 ### 3. Run the Backend
 On Linux / macOS:
 ```bash
-./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
+./mvnw spring-boot:run
 ```
 
 On Windows (PowerShell):
 ```powershell
-.\mvnw.cmd spring-boot:run -Dspring-boot.run.profiles=dev
+.\mvnw.cmd spring-boot:run
 ```
 
 Once started:
