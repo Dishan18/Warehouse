@@ -1,0 +1,7 @@
+# SmartWarehouse
+
+SmartWarehouse is real-time inventory and warehouse management software. Track stock across every SKU, automate low-stock alerts, log stock movements and act on live analytics from one clean dashboard.
+
+- Smart inventory and warehouse management for modern logistics teams
+- Live inventory, stock movements, supplier management and role-based access
+- Get started at https://localhost:3002/login
