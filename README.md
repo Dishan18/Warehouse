@@ -110,7 +110,7 @@ cd frontend
 npm install
 npm run dev
 ```
-The frontend starts on `http://localhost:5173` and proxies API requests to `http://localhost:8080`.
+The frontend starts on `http://localhost:3000` and proxies API requests to `http://localhost:8080`.
 
 ---
 

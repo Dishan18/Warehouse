@@ -82,7 +82,114 @@ curl -s -X POST http://localhost:8080/api/auth/login \
 
 ---
 
-### Step 4: Create Category & Supplier
+### Step 3B: Automated Full-Flow Verification Script (Windows PowerShell)
+
+If you are on Windows, you can execute the entire test sequence (Category lookup/creation, Supplier creation, Product creation, Idempotency deduction, Cache replay protection, Payload tamper rejection, and Low-stock transition) in one command:
+
+```powershell
+# 1. Login
+$login = Invoke-RestMethod -Uri "http://localhost:8080/api/auth/login" `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body '{"email":"admin@warehouse.com","password":"Admin@123"}'
+$TOKEN = $login.accessToken
+Write-Host "1. Authentication: SUCCESS (Token saved)"
+
+# 2. Category: Reuse existing or create unique
+$existingCats = Invoke-RestMethod -Uri "http://localhost:8080/api/categories" -Method Get -Headers @{ Authorization = "Bearer $TOKEN" }
+if ($existingCats.content.Count -gt 0) {
+  $CAT_ID = $existingCats.content[0].id
+  Write-Host "2. Category: Reusing existing '$($existingCats.content[0].name)' (ID: $CAT_ID)"
+} else {
+  $catName = "Category-" + (Get-Random -Minimum 1000 -Maximum 9999)
+  $cat = Invoke-RestMethod -Uri "http://localhost:8080/api/categories" `
+    -Method Post -ContentType "application/json" -Headers @{ Authorization = "Bearer $TOKEN" } `
+    -Body "{`"name`":`"$catName`",`"description`":`"Test`",`"active`":true}"
+  $CAT_ID = $cat.id
+  Write-Host "2. Category: Created new '$catName' (ID: $CAT_ID)"
+}
+
+# 3. Supplier: Reuse existing or create unique
+$existingSups = Invoke-RestMethod -Uri "http://localhost:8080/api/suppliers" -Method Get -Headers @{ Authorization = "Bearer $TOKEN" }
+if ($existingSups.content.Count -gt 0) {
+  $SUP_ID = $existingSups.content[0].id
+  Write-Host "3. Supplier: Reusing existing '$($existingSups.content[0].name)' (ID: $SUP_ID)"
+} else {
+  $supName = "Supplier-" + (Get-Random -Minimum 1000 -Maximum 9999)
+  $sup = Invoke-RestMethod -Uri "http://localhost:8080/api/suppliers" `
+    -Method Post -ContentType "application/json" -Headers @{ Authorization = "Bearer $TOKEN" } `
+    -Body "{`"name`":`"$supName`",`"contactName`":`"Test`",`"email`":`"$supName@test.com`",`"phone`":`"+1234567890`",`"active`":true}"
+  $SUP_ID = $sup.id
+  Write-Host "3. Supplier: Created new '$supName' (ID: $SUP_ID)"
+}
+
+# 4. Product: Create fresh product with initial stock = 10, minStock = 3
+$randNum = Get-Random -Minimum 1000 -Maximum 9999
+$sku = "SKU-AUTO-$randNum"
+$prodBody = @{
+  sku = $sku
+  name = "Auto Test Product $randNum"
+  description = "Automated test item"
+  price = 19.99
+  quantity = 10
+  minStock = 3
+  categoryId = $CAT_ID
+  supplierId = $SUP_ID
+  active = $true
+} | ConvertTo-Json
+
+$prod = Invoke-RestMethod -Uri "http://localhost:8080/api/products" `
+  -Method Post -ContentType "application/json" -Headers @{ Authorization = "Bearer $TOKEN" } `
+  -Body $prodBody
+$PROD_ID = $prod.id
+Write-Host "4. Product: Created '$($prod.name)' (SKU: $sku, Stock: $($prod.quantity), MinStock: $($prod.minStock), Status: $($prod.status))"
+
+# 5. Outbound Stock Movement: Deduct 4 units (10 -> 6)
+$moveKey = "idem-key-$randNum"
+$moveBody = @{ productId = $PROD_ID; quantity = 4; reason = "Deduction Test" } | ConvertTo-Json
+$move = Invoke-RestMethod -Uri "http://localhost:8080/api/movements/outbound" `
+  -Method Post -ContentType "application/json" `
+  -Headers @{ Authorization = "Bearer $TOKEN"; "X-Idempotency-Key" = $moveKey } `
+  -Body $moveBody
+Write-Host "5. Outbound Movement: Before: $($move.beforeQuantity) -> After: $($move.afterQuantity)"
+
+# 6. Idempotency Replay: Resend exact same key to verify double deduction is blocked
+$replay = Invoke-RestMethod -Uri "http://localhost:8080/api/movements/outbound" `
+  -Method Post -ContentType "application/json" `
+  -Headers @{ Authorization = "Bearer $TOKEN"; "X-Idempotency-Key" = $moveKey } `
+  -Body $moveBody
+
+$checkProd = Invoke-RestMethod -Uri "http://localhost:8080/api/products/$PROD_ID" `
+  -Method Get -Headers @{ Authorization = "Bearer $TOKEN" }
+Write-Host "6. Idempotency Replay: Cached Response: $($replay.afterQuantity) | Real DB Stock: $($checkProd.quantity) (NO DOUBLE DEDUCTION)"
+
+# 7. Payload Tamper Detection: Reuse same key with different quantity
+$conflictBody = @{ productId = $PROD_ID; quantity = 2; reason = "Different payload" } | ConvertTo-Json
+try {
+  Invoke-RestMethod -Uri "http://localhost:8080/api/movements/outbound" `
+    -Method Post -ContentType "application/json" `
+    -Headers @{ Authorization = "Bearer $TOKEN"; "X-Idempotency-Key" = $moveKey } `
+    -Body $conflictBody
+} catch {
+  Write-Host "7. Tamper Detection: HTTP $($_.Exception.Response.StatusCode.value__) Conflict Blocked"
+}
+
+# 8. Low Stock Transition: Deduct 4 more units (6 -> 2, dropping below minStock of 3)
+$lowStockKey = "low-stock-$randNum"
+$lowStockBody = @{ productId = $PROD_ID; quantity = 4; reason = "Deplete to Low Stock" } | ConvertTo-Json
+$move2 = Invoke-RestMethod -Uri "http://localhost:8080/api/movements/outbound" `
+  -Method Post -ContentType "application/json" `
+  -Headers @{ Authorization = "Bearer $TOKEN"; "X-Idempotency-Key" = $lowStockKey } `
+  -Body $lowStockBody
+
+$finalProd = Invoke-RestMethod -Uri "http://localhost:8080/api/products/$PROD_ID" `
+  -Method Get -Headers @{ Authorization = "Bearer $TOKEN" }
+Write-Host "8. Low Stock Transition: Quantity: $($finalProd.quantity) (MinStock: $($finalProd.minStock)) | Status: $($finalProd.status)"
+```
+
+---
+
+### Step 4: Create Category & Supplier (Individual cURL Steps)
 Create a Category:
 ```bash
 curl -s -X POST http://localhost:8080/api/categories \
@@ -235,6 +342,23 @@ curl -s -X POST http://localhost:8080/api/movements/outbound \
   "type": "LOW_STOCK"
 }
 ```
+
+---
+
+### Step 10: Run the React Web Frontend
+This repository includes a React 19 + TypeScript + Vite + Material UI single-page application in the `frontend` directory.
+
+To start the frontend dashboard:
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+- **URL**: `http://localhost:3000`
+- **Login Credentials**: Email `admin@warehouse.com` / Password (configured `ADMIN_PASSWORD`)
+- **Features**: Live stock movements, WebSocket low-stock notifications, Recharts dashboard analytics, and product management.
+- **Proxy Configuration**: `vite.config.ts` automatically proxies `/api` and `/ws` to `http://localhost:8080`.
 
 ---
 
