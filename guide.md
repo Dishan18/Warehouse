@@ -44,11 +44,25 @@ http://localhost:8080/swagger-ui.html
 
 ### Step 3: Authenticate & Obtain Bearer Token
 Run in a new terminal window using the configured `ADMIN_PASSWORD`:
+
+In PowerShell:
+```powershell
+$response = Invoke-RestMethod -Uri "http://localhost:8080/api/auth/login" `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body '{"email":"admin@warehouse.com","password":"Admin@123"}'
+
+$TOKEN = $response.accessToken
+$TOKEN
+```
+
+In Linux / macOS Bash:
 ```bash
 curl -s -X POST http://localhost:8080/api/auth/login \
   -H "Content-Type: application/json" \
   -d "{\"email\":\"admin@warehouse.com\",\"password\":\"Admin@123\"}"
 ```
+
 **Expected Response:**
 ```json
 {
@@ -57,11 +71,14 @@ curl -s -X POST http://localhost:8080/api/auth/login \
   "roles": ["ADMIN"]
 }
 ```
-> Save the `accessToken` into an environment variable or clipboard for subsequent requests:
+
+> In Bash, save the `accessToken` into an environment variable:
 > ```bash
 > export TOKEN="<your-access-token>"
 > ```
-> *(Or in PowerShell: `$TOKEN = "<your-access-token>" `)*
+> In PowerShell, the variable `$TOKEN` is already assigned directly from `$response.accessToken`.
+
+> **Tip:** You can also copy the `accessToken` and paste it into **Swagger UI** (`http://localhost:8080/swagger-ui.html`) by clicking the **Authorize** button at the top right to execute all remaining steps with a web GUI.
 
 ---
 
